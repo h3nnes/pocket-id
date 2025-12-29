@@ -131,7 +131,8 @@
 								}}
 							>
 								<Select.Trigger id="source-type-{i}">
-									<Select.Value />
+									{sourceTypes.find((st) => st.value === remapping.sourceType)?.label ||
+										remapping.sourceType}
 								</Select.Trigger>
 								<Select.Content>
 									{#each sourceTypes as sourceType}
@@ -156,7 +157,8 @@
 									}}
 								>
 									<Select.Trigger id="source-value-{i}">
-										<Select.Value />
+										{userFields.find((uf) => uf.value === remapping.sourceValue)?.label ||
+											remapping.sourceValue}
 									</Select.Trigger>
 									<Select.Content>
 										{#each userFields as field}
