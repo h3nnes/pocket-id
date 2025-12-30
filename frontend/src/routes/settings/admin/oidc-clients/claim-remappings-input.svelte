@@ -117,14 +117,11 @@
 						<div>
 							<Label required for="source-type-{i}" class="text-xs">Source Type</Label>
 							<Select.Root
-								selected={{
-									value: remapping.sourceType,
-									label: sourceTypes.find((st) => st.value === remapping.sourceType)?.label ||
-										remapping.sourceType
-								}}
-								onSelectedChange={(selected) => {
-									if (selected) {
-										updateClaimRemapping(i, 'sourceType', selected.value);
+								type="single"
+								value={remapping.sourceType}
+								onValueChange={(v) => {
+									if (v) {
+										updateClaimRemapping(i, 'sourceType', v as ClaimRemappingSourceType);
 										// Clear sourceValue when changing type
 										updateClaimRemapping(i, 'sourceValue', '');
 									}
@@ -147,13 +144,10 @@
 							<Label required for="source-value-{i}" class="text-xs">Source Value</Label>
 							{#if remapping.sourceType === 'user_field'}
 								<Select.Root
-									selected={{
-										value: remapping.sourceValue,
-										label: userFields.find((uf) => uf.value === remapping.sourceValue)?.label ||
-											remapping.sourceValue
-									}}
-									onSelectedChange={(selected) => {
-										if (selected) updateClaimRemapping(i, 'sourceValue', selected.value);
+									type="single"
+									value={remapping.sourceValue}
+									onValueChange={(v) => {
+										if (v) updateClaimRemapping(i, 'sourceValue', v);
 									}}
 								>
 									<Select.Trigger id="source-value-{i}">
