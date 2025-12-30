@@ -63,10 +63,10 @@
 		field: keyof OidcClientClaimRemapping,
 		value: string
 	) {
-		claimRemappings[index] = {
-			...claimRemappings[index],
-			[field]: value
-		};
+		// Reassign entire array to trigger reactivity
+		claimRemappings = claimRemappings.map((remapping, i) =>
+			i === index ? { ...remapping, [field]: value } : remapping
+		);
 	}
 
 	function getFieldError(index: number, field: keyof OidcClientClaimRemapping): string | null {
