@@ -949,10 +949,24 @@ func (s *OidcService) applyClaimRemappings(
 
 		// If value was found, use it; otherwise fall back to original value
 		if foundValue {
+			common.Logger.Debug(
+				"Applying claim remapping",
+				"claim", remapping.ClaimName,
+				"oldValue", originalClaims[remapping.ClaimName],
+				"newValue", remappedValue,
+			)
 			claims[remapping.ClaimName] = remappedValue
-		} else if originalValue, exists := originalClaims[remapping.ClaimName]; exists {
-			// Fall back to original value if remapping source doesn't exist
-			claims[remapping.ClaimName] = originalValue
+		} else {
+			common.Logger.Debug(
+				"Claim remapping source not found, using fallback",
+				"claim", remapping.ClaimName,
+				"sourceType", remapping.SourceType,
+				"sourceValue", remapping.SourceValue,
+			)
+			if originalValue, exists := originalClaims[remapping.ClaimName]; exists {
+				// Fall back to original value if remapping source doesn't exist
+				claims[remapping.ClaimName] = originalValue
+			}
 		}
 	}
 
@@ -2117,6 +2131,21 @@ func (s *OidcService) getUserClaims(ctx context.Context, user *model.User, scope
 
 	// Apply claim remappings for this client (after all standard claims are set)
 	if client != nil && len(client.Credentials.ClaimRemappings) > 0 {
+		// Log the remappings being applied for debugging
+		common.Logger.Debug(
+			"Applying claim remappings",
+			"clientID", client.ID,
+			"remappingCount", len(client.Credentials.ClaimRemappings),
+			"customClaimsAvailable", len(customClaimsMap),
+		)
+		for _, r := range client.Credentials.ClaimRemappings {
+			common.Logger.Debug(
+				"Claim remapping",
+				"claimName", r.ClaimName,
+				"sourceType", r.SourceType,
+				"sourceValue", r.SourceValue,
+			)
+		}
 		err = s.applyClaimRemappings(claims, client.Credentials.ClaimRemappings, user, customClaimsMap)
 		if err != nil {
 			return nil, err
