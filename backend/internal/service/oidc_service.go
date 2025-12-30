@@ -2078,28 +2078,31 @@ func (s *OidcService) getUserClaims(ctx context.Context, user *model.User, scope
 		claims["groups"] = userGroups
 	}
 
-	if slices.Contains(scopes, "profile") {
-		// Add custom claims
-		customClaims, err := s.customClaimService.GetCustomClaimsForUserWithUserGroups(ctx, user.ID, tx)
-		if err != nil {
-			return nil, err
-		}
+	// Load custom claims (needed for remapping and profile scope)
+	customClaims, err := s.customClaimService.GetCustomClaimsForUserWithUserGroups(ctx, user.ID, tx)
+	if err != nil {
+		return nil, err
+	}
 
-		// Store custom claims in a map for easy lookup during remapping
-		customClaimsMap := make(map[string]any)
-		for _, customClaim := range customClaims {
-			// The value of the custom claim can be a JSON object or a string
-			var jsonValue any
-			err := json.Unmarshal([]byte(customClaim.Value), &jsonValue)
-			if err == nil {
-				// It's JSON, so we store it as an object
-				customClaimsMap[customClaim.Key] = jsonValue
-				claims[customClaim.Key] = jsonValue
-			} else {
-				// Marshaling failed, so we store it as a string
-				customClaimsMap[customClaim.Key] = customClaim.Value
-				claims[customClaim.Key] = customClaim.Value
-			}
+	// Store custom claims in a map for easy lookup during remapping
+	customClaimsMap := make(map[string]any)
+	for _, customClaim := range customClaims {
+		// The value of the custom claim can be a JSON object or a string
+		var jsonValue any
+		err := json.Unmarshal([]byte(customClaim.Value), &jsonValue)
+		if err == nil {
+			// It's JSON, so we store it as an object
+			customClaimsMap[customClaim.Key] = jsonValue
+		} else {
+			// Marshaling failed, so we store it as a string
+			customClaimsMap[customClaim.Key] = customClaim.Value
+		}
+	}
+
+	if slices.Contains(scopes, "profile") {
+		// Add custom claims to the claims map
+		for key, value := range customClaimsMap {
+			claims[key] = value
 		}
 
 		// Add profile claims
@@ -2110,18 +2113,14 @@ func (s *OidcService) getUserClaims(ctx context.Context, user *model.User, scope
 
 		claims["preferred_username"] = user.Username
 		claims["picture"] = common.EnvConfig.AppURL + "/api/users/" + user.ID + "/profile-picture.png"
-
-		// Apply claim remappings for this client (if configured)
-		if client != nil && len(client.Credentials.ClaimRemappings) > 0 {
-			err = s.applyClaimRemappings(claims, client.Credentials.ClaimRemappings, user, customClaimsMap)
-			if err != nil {
-				return nil, err
-			}
-		}
 	}
 
-	if slices.Contains(scopes, "email") {
-		claims["email"] = user.Email
+	// Apply claim remappings for this client (after all standard claims are set)
+	if client != nil && len(client.Credentials.ClaimRemappings) > 0 {
+		err = s.applyClaimRemappings(claims, client.Credentials.ClaimRemappings, user, customClaimsMap)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return claims, nil
