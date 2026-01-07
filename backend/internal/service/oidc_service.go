@@ -56,6 +56,7 @@ type OidcService struct {
 	auditLogService    *AuditLogService
 	customClaimService *CustomClaimService
 	webAuthnService    *WebAuthnService
+	scimService        *ScimService
 
 	httpClient  *http.Client
 	jwkCache    *jwk.Cache
@@ -70,6 +71,7 @@ func NewOidcService(
 	auditLogService *AuditLogService,
 	customClaimService *CustomClaimService,
 	webAuthnService *WebAuthnService,
+	scimService *ScimService,
 	httpClient *http.Client,
 	fileStorage storage.FileStorage,
 ) (s *OidcService, err error) {
@@ -80,6 +82,7 @@ func NewOidcService(
 		auditLogService:    auditLogService,
 		customClaimService: customClaimService,
 		webAuthnService:    webAuthnService,
+		scimService:        scimService,
 		httpClient:         httpClient,
 		fileStorage:        fileStorage,
 	}
@@ -311,7 +314,7 @@ func (s *OidcService) createTokenFromDeviceCode(ctx context.Context, input dto.O
 	}
 
 	// Explicitly use the input clientID for the audience claim to ensure consistency
-	idToken, err := s.jwtService.GenerateIDToken(userClaims, input.ClientID, "")
+	idToken, err := s.jwtService.GenerateIDToken(userClaims, input.ClientID, deviceAuth.Nonce)
 	if err != nil {
 		return CreatedTokens{}, err
 	}
@@ -1257,6 +1260,7 @@ func (s *OidcService) UpdateAllowedUserGroups(ctx context.Context, id string, in
 		return model.OidcClient{}, err
 	}
 
+	s.scimService.ScheduleSync()
 	return client, nil
 }
 
@@ -1447,6 +1451,7 @@ func (s *OidcService) CreateDeviceAuthorization(ctx context.Context, input dto.O
 		ExpiresAt:    datatype.DateTime(time.Now().Add(DeviceCodeDuration)),
 		IsAuthorized: false,
 		ClientID:     client.ID,
+		Nonce:        input.Nonce,
 	}
 
 	if err := s.db.Create(deviceAuth).Error; err != nil {

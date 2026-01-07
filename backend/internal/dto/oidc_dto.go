@@ -146,6 +146,7 @@ type OidcDeviceAuthorizationRequestDto struct {
 	ClientSecret        string `form:"client_secret"`
 	ClientAssertion     string `form:"client_assertion"`
 	ClientAssertionType string `form:"client_assertion_type"`
+	Nonce               string `form:"nonce"`
 }
 
 type OidcDeviceAuthorizationResponseDto struct {

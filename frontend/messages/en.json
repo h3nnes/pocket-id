@@ -46,7 +46,11 @@
 	"authenticator_does_not_support_resident_keys": "The authenticator does not support resident keys",
 	"passkey_was_previously_registered": "This passkey was previously registered",
 	"authenticator_does_not_support_any_of_the_requested_algorithms": "The authenticator does not support any of the requested algorithms",
-	"authenticator_timed_out": "The authenticator timed out",
+	"webauthn_error_invalid_rp_id": "The configured relying party ID is invalid.",
+	"webauthn_error_invalid_domain": "The configured domain is invalid.",
+	"contact_administrator_to_fix": "Contact your administrator to fix this issue.",
+	"webauthn_operation_not_allowed_or_timed_out": "The operation was not allowed or timed out",
+	"webauthn_not_supported_by_browser": "Passkeys are not supported by this browser. Please use an alternative sign in method.",
 	"critical_error_occurred_contact_administrator": "A critical error occurred. Please contact your administrator.",
 	"sign_in_to": "Sign in to {name}",
 	"client_not_found": "Client not found",
@@ -498,5 +502,8 @@
 	"scim_sync_successful": "The SCIM sync has been completed successfully.",
 	"save_and_sync": "Save and Sync",
 	"scim_save_changes_description": "You have to save the changes before starting a SCIM sync. Do you want to save now?",
-	"scopes": "Scopes"
+	"scopes": "Scopes",
+	"issuer_url": "Issuer URL",
+	"smtp_field_required_when_other_provided": "Required when any SMTP setting is provided",
+	"smtp_field_required_when_email_enabled": "Required when email notifications are enabled"
 }
