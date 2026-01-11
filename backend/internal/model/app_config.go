@@ -36,6 +36,7 @@ type AppConfig struct {
 	// General
 	AppName                   AppConfigVariable `key:"appName,public"` // Public
 	SessionDuration           AppConfigVariable `key:"sessionDuration"`
+	HomePageURL               AppConfigVariable `key:"homePageUrl,public"` // Public
 	EmailsVerified            AppConfigVariable `key:"emailsVerified"`
 	AccentColor               AppConfigVariable `key:"accentColor,public"`         // Public
 	DisableAnimations         AppConfigVariable `key:"disableAnimations,public"`   // Public
@@ -58,6 +59,7 @@ type AppConfig struct {
 	EmailOneTimeAccessAsUnauthenticatedEnabled AppConfigVariable `key:"emailOneTimeAccessAsUnauthenticatedEnabled,public"` // Public
 	EmailOneTimeAccessAsAdminEnabled           AppConfigVariable `key:"emailOneTimeAccessAsAdminEnabled,public"`           // Public
 	EmailApiKeyExpirationEnabled               AppConfigVariable `key:"emailApiKeyExpirationEnabled"`
+	EmailVerificationEnabled                   AppConfigVariable `key:"emailVerificationEnabled,public"` // Public
 	// LDAP
 	LdapEnabled                        AppConfigVariable `key:"ldapEnabled,public"` // Public
 	LdapUrl                            AppConfigVariable `key:"ldapUrl"`

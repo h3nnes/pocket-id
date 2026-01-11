@@ -266,6 +266,13 @@ func (e *APIKeyNotFoundError) Error() string {
 }
 func (e *APIKeyNotFoundError) HttpStatusCode() int { return http.StatusUnauthorized }
 
+type APIKeyNotExpiredError struct{}
+
+func (e *APIKeyNotExpiredError) Error() string {
+	return "API Key is not expired yet"
+}
+func (e *APIKeyNotExpiredError) HttpStatusCode() int { return http.StatusBadRequest }
+
 type APIKeyExpirationDateError struct{}
 
 func (e *APIKeyExpirationDateError) Error() string {
@@ -404,4 +411,14 @@ func (e *ImageNotFoundError) Error() string {
 
 func (e *ImageNotFoundError) HttpStatusCode() int {
 	return http.StatusNotFound
+}
+
+type InvalidEmailVerificationTokenError struct{}
+
+func (e *InvalidEmailVerificationTokenError) Error() string {
+	return "Invalid email verification token"
+}
+
+func (e *InvalidEmailVerificationTokenError) HttpStatusCode() int {
+	return http.StatusBadRequest
 }

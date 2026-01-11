@@ -2,10 +2,12 @@ import type { CustomClaim } from './custom-claim.type';
 
 export type AppConfig = {
 	appName: string;
+	homePageUrl: string;
 	allowOwnAccountEdit: boolean;
 	allowUserSignups: 'disabled' | 'withToken' | 'open';
 	emailOneTimeAccessAsUnauthenticatedEnabled: boolean;
 	emailOneTimeAccessAsAdminEnabled: boolean;
+	emailVerificationEnabled: boolean;
 	ldapEnabled: boolean;
 	disableAnimations: boolean;
 	uiConfigDisabled: boolean;

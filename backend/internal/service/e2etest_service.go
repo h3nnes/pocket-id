@@ -80,23 +80,25 @@ func (s *TestService) SeedDatabase(baseURL string) error {
 				Base: model.Base{
 					ID: "f4b89dc2-62fb-46bf-9f5f-c34f4eafe93e",
 				},
-				Username:    "tim",
-				Email:       utils.Ptr("tim.cook@test.com"),
-				FirstName:   "Tim",
-				LastName:    "Cook",
-				DisplayName: "Tim Cook",
-				IsAdmin:     true,
+				Username:      "tim",
+				Email:         utils.Ptr("tim.cook@test.com"),
+				EmailVerified: true,
+				FirstName:     "Tim",
+				LastName:      "Cook",
+				DisplayName:   "Tim Cook",
+				IsAdmin:       true,
 			},
 			{
 				Base: model.Base{
 					ID: "1cd19686-f9a6-43f4-a41f-14a0bf5b4036",
 				},
-				Username:    "craig",
-				Email:       utils.Ptr("craig.federighi@test.com"),
-				FirstName:   "Craig",
-				LastName:    "Federighi",
-				DisplayName: "Craig Federighi",
-				IsAdmin:     false,
+				Username:      "craig",
+				Email:         utils.Ptr("craig.federighi@test.com"),
+				EmailVerified: false,
+				FirstName:     "Craig",
+				LastName:      "Federighi",
+				DisplayName:   "Craig Federighi",
+				IsAdmin:       false,
 			},
 			{
 				Base: model.Base{
@@ -354,17 +356,30 @@ func (s *TestService) SeedDatabase(baseURL string) error {
 			return err
 		}
 
-		apiKey := model.ApiKey{
-			Base: model.Base{
-				ID: "5f1fa856-c164-4295-961e-175a0d22d725",
+		apiKeys := []model.ApiKey{
+			{
+				Base: model.Base{
+					ID: "5f1fa856-c164-4295-961e-175a0d22d725",
+				},
+				Name:      "Test API Key",
+				Key:       "6c34966f57ef2bb7857649aff0e7ab3ad67af93c846342ced3f5a07be8706c20",
+				UserID:    users[0].ID,
+				ExpiresAt: datatype.DateTime(time.Now().Add(30 * 24 * time.Hour)),
 			},
-			Name:      "Test API Key",
-			Key:       "6c34966f57ef2bb7857649aff0e7ab3ad67af93c846342ced3f5a07be8706c20",
-			UserID:    users[0].ID,
-			ExpiresAt: datatype.DateTime(time.Now().Add(30 * 24 * time.Hour)),
+			{
+				Base: model.Base{
+					ID: "98900330-7a7b-48fe-881b-2cc6ad049976",
+				},
+				Name:      "Expired API Key",
+				Key:       "141ff8ac9db640ba93630099de83d0ead8e7ac673e3a7d31b4fd7ff2252e6389",
+				UserID:    users[0].ID,
+				ExpiresAt: datatype.DateTime(time.Now().Add(-20 * 24 * time.Hour)),
+			},
 		}
-		if err := tx.Create(&apiKey).Error; err != nil {
-			return err
+		for _, apiKey := range apiKeys {
+			if err := tx.Create(&apiKey).Error; err != nil {
+				return err
+			}
 		}
 
 		signupTokens := []model.SignupToken{
@@ -409,6 +424,31 @@ func (s *TestService) SeedDatabase(baseURL string) error {
 			},
 		}
 		for _, token := range signupTokens {
+			if err := tx.Create(&token).Error; err != nil {
+				return err
+			}
+		}
+
+		emailVerificationTokens := []model.EmailVerificationToken{
+			{
+				Base: model.Base{
+					ID: "ef9ca469-b178-4857-bd39-26639dca45de",
+				},
+				Token:     "2FZFSoupBdHyqIL65bWTsgCgHIhxlXup",
+				ExpiresAt: datatype.DateTime(time.Now().Add(2 * time.Hour)),
+				UserID:    users[1].ID,
+			},
+			{
+				Base: model.Base{
+					ID: "a3dcb4d2-7f3c-4e8a-9f4d-5b6c7d8e9f00",
+				},
+				Token:     "EXPIRED1234567890ABCDE",
+				ExpiresAt: datatype.DateTime(time.Now().Add(-1 * time.Hour)),
+				UserID:    users[1].ID,
+			},
+		}
+
+		for _, token := range emailVerificationTokens {
 			if err := tx.Create(&token).Error; err != nil {
 				return err
 			}

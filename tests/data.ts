@@ -92,11 +92,23 @@ export const oneTimeAccessTokens = [
 	{ token: 'YCGDtftvsvYWiXd0', expired: true }
 ];
 
+export const emailVerificationTokens = [
+	{ token: '2FZFSoupBdHyqIL65bWTsgCgHIhxlXup', expired: false },
+	{ token: 'EXPIRED1234567890ABCDE', expired: true }
+];
+
 export const apiKeys = [
 	{
 		id: '5f1fa856-c164-4295-961e-175a0d22d725',
 		key: '6c34966f57ef2bb7857649aff0e7ab3ad67af93c846342ced3f5a07be8706c20',
-		name: 'Test API Key'
+		name: 'Test API Key',
+		expired: false
+	},
+	{
+		id: '98900330-7a7b-48fe-881b-2cc6ad049976',
+		key: '141ff8ac9db640ba93630099de83d0ead8e7ac673e3a7d31b4fd7ff2252e6389',
+		name: 'Expired API Key',
+		expired: true
 	}
 ];
 
