@@ -47,7 +47,7 @@ func NewOidcController(group *gin.RouterGroup, authMiddleware *middleware.AuthMi
 	group.POST("/oidc/clients/:id/secret", authMiddleware.Add(), oc.createClientSecretHandler)
 
 	group.GET("/oidc/clients/:id/logo", oc.getClientLogoHandler)
-	group.DELETE("/oidc/clients/:id/logo", oc.deleteClientLogoHandler)
+	group.DELETE("/oidc/clients/:id/logo", authMiddleware.Add(), oc.deleteClientLogoHandler)
 	group.POST("/oidc/clients/:id/logo", authMiddleware.Add(), fileSizeLimitMiddleware.Add(2<<20), oc.updateClientLogoHandler)
 
 	group.GET("/oidc/clients/:id/preview/:userId", authMiddleware.Add(), oc.getClientPreviewHandler)
@@ -164,7 +164,7 @@ func (oc *OidcController) createTokensHandler(c *gin.Context) {
 
 	// Client id and secret can also be passed over the Authorization header
 	if input.ClientID == "" && input.ClientSecret == "" {
-		input.ClientID, input.ClientSecret, _ = c.Request.BasicAuth()
+		input.ClientID, input.ClientSecret, _ = utils.OAuthClientBasicAuth(c.Request)
 	}
 
 	tokens, err := oc.oidcService.CreateTokens(c.Request.Context(), input)
@@ -322,7 +322,7 @@ func (oc *OidcController) introspectTokenHandler(c *gin.Context) {
 		creds service.ClientAuthCredentials
 		ok    bool
 	)
-	creds.ClientID, creds.ClientSecret, ok = c.Request.BasicAuth()
+	creds.ClientID, creds.ClientSecret, ok = utils.OAuthClientBasicAuth(c.Request)
 	if !ok {
 		// If there's no basic auth, check if we have a bearer token
 		bearer, ok := utils.BearerAuth(c.Request)
@@ -659,7 +659,7 @@ func (oc *OidcController) deviceAuthorizationHandler(c *gin.Context) {
 
 	// Client id and secret can also be passed over the Authorization header
 	if input.ClientID == "" && input.ClientSecret == "" {
-		input.ClientID, input.ClientSecret, _ = c.Request.BasicAuth()
+		input.ClientID, input.ClientSecret, _ = utils.OAuthClientBasicAuth(c.Request)
 	}
 
 	response, err := oc.oidcService.CreateDeviceAuthorization(c.Request.Context(), input)

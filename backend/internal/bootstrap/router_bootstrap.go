@@ -15,6 +15,8 @@ import (
 	sloggin "github.com/gin-contrib/slog"
 	"github.com/gin-gonic/gin"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
@@ -51,8 +53,6 @@ func initRouter(db *gorm.DB, svc *services) (utils.Service, error) {
 		r.Use(otelgin.Middleware(common.Name))
 	}
 
-	rateLimitMiddleware := middleware.NewRateLimitMiddleware().Add(rate.Every(time.Second), 60)
-
 	// Setup global middleware
 	r.Use(middleware.HeadMiddleware())
 	r.Use(middleware.NewCacheControlMiddleware().Add())
@@ -60,7 +60,8 @@ func initRouter(db *gorm.DB, svc *services) (utils.Service, error) {
 	r.Use(middleware.NewCspMiddleware().Add())
 	r.Use(middleware.NewErrorHandlerMiddleware().Add())
 
-	err := frontend.RegisterFrontend(r)
+	frontendRateLimitMiddleware := middleware.NewRateLimitMiddleware().Add(rate.Every(100*time.Millisecond), 300)
+	err := frontend.RegisterFrontend(r, frontendRateLimitMiddleware)
 	if errors.Is(err, frontend.ErrFrontendNotIncluded) {
 		slog.Warn("Frontend is not included in the build. Skipping frontend registration.")
 	} else if err != nil {
@@ -71,8 +72,10 @@ func initRouter(db *gorm.DB, svc *services) (utils.Service, error) {
 	authMiddleware := middleware.NewAuthMiddleware(svc.apiKeyService, svc.userService, svc.jwtService)
 	fileSizeLimitMiddleware := middleware.NewFileSizeLimitMiddleware()
 
+	apiRateLimitMiddleware := middleware.NewRateLimitMiddleware().Add(rate.Every(time.Second), 100)
+
 	// Set up API routes
-	apiGroup := r.Group("/api", rateLimitMiddleware)
+	apiGroup := r.Group("/api", apiRateLimitMiddleware)
 	controller.NewApiKeyController(apiGroup, authMiddleware, svc.apiKeyService)
 	controller.NewWebauthnController(apiGroup, authMiddleware, middleware.NewRateLimitMiddleware(), svc.webauthnService, svc.appConfigService)
 	controller.NewOidcController(apiGroup, authMiddleware, fileSizeLimitMiddleware, svc.oidcService, svc.jwtService)
@@ -94,18 +97,23 @@ func initRouter(db *gorm.DB, svc *services) (utils.Service, error) {
 	}
 
 	// Set up base routes
-	baseGroup := r.Group("/", rateLimitMiddleware)
+	baseGroup := r.Group("/", apiRateLimitMiddleware)
 	controller.NewWellKnownController(baseGroup, svc.jwtService)
 
 	// Set up healthcheck routes
 	// These are not rate-limited
 	controller.NewHealthzController(r)
 
+	var protocols http.Protocols
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
 	// Set up the server
 	srv := &http.Server{
 		MaxHeaderBytes:    1 << 20,
 		ReadHeaderTimeout: 10 * time.Second,
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		Protocols:         &protocols,
+		Handler: h2c.NewHandler(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 			// HEAD requests don't get matched by Gin routes, so we convert them to GET
 			// middleware.HeadMiddleware will convert them back to HEAD later
 			if req.Method == http.MethodHead {
@@ -115,7 +123,7 @@ func initRouter(db *gorm.DB, svc *services) (utils.Service, error) {
 			}
 
 			r.ServeHTTP(w, req)
-		}),
+		}), &http2.Server{}),
 	}
 
 	// Set up the listener
