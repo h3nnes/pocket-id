@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -582,10 +583,9 @@ func TestOidcServiceRefreshTokenAuthorizationState(t *testing.T) {
 			appConfigService: mockConfig,
 		}
 
-		email := "refresh-token-user@example.com"
 		user := model.User{
 			Username:      "refresh-token-user",
-			Email:         &email,
+			Email:         new("refresh-token-user@example.com"),
 			EmailVerified: true,
 			FirstName:     "Refresh",
 			LastName:      "User",
@@ -762,6 +762,61 @@ func TestValidateCodeVerifier_Plain(t *testing.T) {
 	})
 }
 
+func TestCodeChallengeMethodIsSha256(t *testing.T) {
+	tests := []struct {
+		name       string
+		method     string
+		wantSha256 bool
+		wantErr    bool
+	}{
+		{
+			name:       "omitted defaults to plain",
+			method:     "",
+			wantSha256: false,
+		},
+		{
+			name:       "plain",
+			method:     "plain",
+			wantSha256: false,
+		},
+		{
+			name:       "plain case insensitive",
+			method:     "PLAIN",
+			wantSha256: false,
+		},
+		{
+			name:       "s256",
+			method:     "S256",
+			wantSha256: true,
+		},
+		{
+			name:       "s256 case insensitive",
+			method:     "s256",
+			wantSha256: true,
+		},
+		{
+			name:    "unknown method",
+			method:  "S384",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := codeChallengeMethodIsSha256(tt.method)
+			if tt.wantErr {
+				require.Error(t, err)
+				var invalidRequest *common.OidcInvalidRequestError
+				require.ErrorAs(t, err, &invalidRequest)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSha256, got)
+		})
+	}
+}
+
 func TestOidcService_updateClientLogoType(t *testing.T) {
 	// Create a test database
 	db := testutils.NewDatabaseForTest(t)
@@ -895,6 +950,8 @@ func TestOidcService_updateClientLogoType(t *testing.T) {
 }
 
 func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
+	const publicLogoHost = "https://8.8.8.8"
+
 	// Create a test database
 	db := testutils.NewDatabaseForTest(t)
 
@@ -940,7 +997,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 		// Create a mock HTTP client with responses
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/logo.png": pngResponse,
+			publicLogoHost + "/logo.png": pngResponse,
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -956,7 +1013,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 		}
 
 		// Download and save the logo
-		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "https://example.com/logo.png", true)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, publicLogoHost+"/logo.png", true)
 		require.NoError(t, err)
 
 		// Verify the file was saved
@@ -985,7 +1042,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/dark-logo.webp": webpResponse,
+			publicLogoHost + "/dark-logo.webp": webpResponse,
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -1000,7 +1057,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 		}
 
 		// Download and save the dark logo
-		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "https://example.com/dark-logo.webp", false)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, publicLogoHost+"/dark-logo.webp", false)
 		require.NoError(t, err)
 
 		// Verify the dark logo file was saved
@@ -1024,7 +1081,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/icon.svg": testutils.NewMockResponse(http.StatusOK, string(svgContent)),
+			publicLogoHost + "/icon.svg": testutils.NewMockResponse(http.StatusOK, string(svgContent)),
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -1038,7 +1095,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 			httpClient:  httpClient,
 		}
 
-		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "https://example.com/icon.svg", true)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, publicLogoHost+"/icon.svg", true)
 		require.NoError(t, err)
 
 		// Verify SVG file was saved
@@ -1055,7 +1112,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/logo": jpgResponse,
+			publicLogoHost + "/logo": jpgResponse,
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -1069,7 +1126,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 			httpClient:  httpClient,
 		}
 
-		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "https://example.com/logo", true)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, publicLogoHost+"/logo", true)
 		require.NoError(t, err)
 
 		// Verify JPG file was saved (jpeg extension is normalized to jpg)
@@ -1091,7 +1148,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 	t.Run("Returns error for non-200 status code", func(t *testing.T) {
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/not-found.png": testutils.NewMockResponse(http.StatusNotFound, "Not Found"),
+			publicLogoHost + "/not-found.png": testutils.NewMockResponse(http.StatusNotFound, "Not Found"),
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -1105,7 +1162,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 			httpClient:  httpClient,
 		}
 
-		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "https://example.com/not-found.png", true)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, publicLogoHost+"/not-found.png", true)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to fetch logo")
 	})
@@ -1121,7 +1178,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/large.png": largeResponse,
+			publicLogoHost + "/large.png": largeResponse,
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -1135,7 +1192,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 			httpClient:  httpClient,
 		}
 
-		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "https://example.com/large.png", true)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, publicLogoHost+"/large.png", true)
 		require.Error(t, err)
 		require.ErrorIs(t, err, errLogoTooLarge)
 	})
@@ -1147,7 +1204,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/file.txt": textResponse,
+			publicLogoHost + "/file.txt": textResponse,
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -1161,7 +1218,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 			httpClient:  httpClient,
 		}
 
-		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "https://example.com/file.txt", true)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, publicLogoHost+"/file.txt", true)
 		require.Error(t, err)
 		var fileTypeErr *common.FileTypeNotSupportedError
 		require.ErrorAs(t, err, &fileTypeErr)
@@ -1174,7 +1231,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
-			"https://example.com/logo.png": pngResponse,
+			publicLogoHost + "/logo.png": pngResponse,
 		}
 		httpClient := &http.Client{
 			Transport: &testutils.MockRoundTripper{
@@ -1188,7 +1245,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 			httpClient:  httpClient,
 		}
 
-		err := s.downloadAndSaveLogoFromURL(t.Context(), "non-existent-client-id", "https://example.com/logo.png", true)
+		err := s.downloadAndSaveLogoFromURL(t.Context(), "non-existent-client-id", publicLogoHost+"/logo.png", true)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to look up client")
 	})
@@ -1236,10 +1293,10 @@ func TestPromptParameterConflicts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			values := parsePromptParameter(tt.prompt)
-			hasNone := contains(values, "none")
-			hasConsent := contains(values, "consent")
-			hasLogin := contains(values, "login")
-			hasSelectAccount := contains(values, "select_account")
+			hasNone := slices.Contains(values, "none")
+			hasConsent := slices.Contains(values, "consent")
+			hasLogin := slices.Contains(values, "login")
+			hasSelectAccount := slices.Contains(values, "select_account")
 
 			conflict := hasNone && (hasConsent || hasLogin || hasSelectAccount)
 			assert.Equal(t, tt.expectConflict, conflict)
@@ -1247,19 +1304,79 @@ func TestPromptParameterConflicts(t *testing.T) {
 	}
 }
 
-func TestContains(t *testing.T) {
-	t.Run("finds value in slice", func(t *testing.T) {
-		slice := []string{"none", "login", "consent"}
-		assert.True(t, contains(slice, "login"))
-	})
+func TestOidcService_ValidateEndSession_DeletesRefreshTokens(t *testing.T) {
+	db := testutils.NewDatabaseForTest(t)
+	common.EnvConfig.EncryptionKey = []byte("0123456789abcdef0123456789abcdef")
 
-	t.Run("returns false for missing value", func(t *testing.T) {
-		slice := []string{"none", "login"}
-		assert.False(t, contains(slice, "consent"))
+	mockConfig := NewTestAppConfigService(&model.AppConfig{
+		SessionDuration: model.AppConfigVariable{Value: "60"},
 	})
+	mockJwtService, err := NewJwtService(t.Context(), db, mockConfig)
+	require.NoError(t, err)
 
-	t.Run("returns false for empty slice", func(t *testing.T) {
-		slice := []string{}
-		assert.False(t, contains(slice, "none"))
-	})
+	oidcService := &OidcService{
+		db:         db,
+		jwtService: mockJwtService,
+	}
+
+	ctx := context.Background()
+	userID := "test-user-123"
+	clientID := "test-client-456"
+
+	userEmail := "test@example.com"
+	user := model.User{
+		Base:  model.Base{ID: userID},
+		Email: &userEmail,
+	}
+	require.NoError(t, db.Create(&user).Error)
+
+	client := model.OidcClient{
+		Base:               model.Base{ID: clientID},
+		Name:               "Test Client",
+		LogoutCallbackURLs: []string{"https://example.com/logout"},
+	}
+	require.NoError(t, db.Create(&client).Error)
+
+	authorization := model.UserAuthorizedOidcClient{
+		UserID:   userID,
+		ClientID: clientID,
+	}
+	require.NoError(t, db.Create(&authorization).Error)
+
+	refreshToken1 := model.OidcRefreshToken{
+		Token:    "refresh-token-1",
+		UserID:   userID,
+		ClientID: clientID,
+	}
+	require.NoError(t, db.Create(&refreshToken1).Error)
+
+	refreshToken2 := model.OidcRefreshToken{
+		Token:    "refresh-token-2",
+		UserID:   userID,
+		ClientID: "other-client",
+	}
+	require.NoError(t, db.Create(&refreshToken2).Error)
+
+	userClaims := map[string]any{
+		"sub":   userID,
+		"name":  "Test User",
+		"email": userEmail,
+	}
+	idToken, err := mockJwtService.GenerateIDToken(userClaims, clientID, "", "")
+	require.NoError(t, err)
+
+	input := dto.OidcLogoutDto{
+		IdTokenHint:           idToken,
+		ClientId:              clientID,
+		PostLogoutRedirectUri: "https://example.com/logout",
+	}
+
+	callbackURL, err := oidcService.ValidateEndSession(ctx, input, userID)
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/logout", callbackURL)
+
+	var remainingTokens []model.OidcRefreshToken
+	err = db.Where("user_id = ?", userID).Find(&remainingTokens).Error
+	require.NoError(t, err)
+	assert.Empty(t, remainingTokens, "all refresh tokens for the user should be deleted")
 }

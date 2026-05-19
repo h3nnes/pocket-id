@@ -151,22 +151,20 @@ func (s *OidcService) Authorize(ctx context.Context, input dto.AuthorizeOidcClie
 
 	// Parse prompt parameter (space-delimited list per OIDC spec)
 	promptValues := parsePromptParameter(input.Prompt)
-	hasPromptNone := contains(promptValues, "none")
-	hasPromptLogin := contains(promptValues, "login")
-	hasPromptConsent := contains(promptValues, "consent")
-	hasPromptSelectAccount := contains(promptValues, "select_account")
+	hasPromptNone := slices.Contains(promptValues, "none")
+	hasPromptLogin := slices.Contains(promptValues, "login")
+	hasPromptConsent := slices.Contains(promptValues, "consent")
+	hasPromptSelectAccount := slices.Contains(promptValues, "select_account")
 
 	// Validate prompt parameter conflicts early.
 	// Per OIDC Core §3.1.2.6, prompt=none must not be combined with any
 	// value that requires user interaction.
 	if hasPromptNone && (hasPromptConsent || hasPromptLogin || hasPromptSelectAccount) {
-		return "", "", &common.OidcInteractionRequiredError{}
+		return "", "", common.NewOidcInvalidRequestError("prompt type 'none' cannot be combined with others")
 	}
 
-	// Handle prompt=select_account early (not supported)
-	if hasPromptSelectAccount {
-		return "", "", &common.OidcInteractionRequiredError{}
-	}
+	// prompt=select_account is handled entirely in the UI
+	// Pocket ID holds one session per browser, so the frontend renders the current user as the sole selectable account and then calls Authorize normally.
 
 	// If prompt=login is specified or the client requires reauthentication, check the reauthentication token
 	if hasPromptLogin || client.RequiresReauthentication {
@@ -219,14 +217,24 @@ func (s *OidcService) Authorize(ctx context.Context, input dto.AuthorizeOidcClie
 
 	// Log the authorization event
 	if hasAlreadyAuthorizedClient {
-		s.auditLogService.Create(ctx, model.AuditLogEventClientAuthorization, ipAddress, userAgent, userID, model.AuditLogData{"clientName": client.Name}, tx)
+		s.auditLogService.Create(
+			ctx, model.AuditLogEventClientAuthorization,
+			ipAddress, userAgent, userID,
+			model.AuditLogData{"clientName": client.Name},
+			tx,
+		)
 	} else {
-		s.auditLogService.Create(ctx, model.AuditLogEventNewClientAuthorization, ipAddress, userAgent, userID, model.AuditLogData{"clientName": client.Name}, tx)
+		s.auditLogService.Create(
+			ctx, model.AuditLogEventNewClientAuthorization,
+			ipAddress, userAgent, userID,
+			model.AuditLogData{"clientName": client.Name},
+			tx,
+		)
 	}
 
 	err = tx.Commit().Error
 	if err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return code, callbackURL, nil
@@ -753,6 +761,27 @@ func (s *OidcService) introspectRefreshToken(ctx context.Context, clientID strin
 
 func (s *OidcService) GetClient(ctx context.Context, clientID string) (model.OidcClient, error) {
 	return s.getClientInternal(ctx, clientID, s.db, false)
+}
+
+func (s *OidcService) ResolveAllowedCallbackURL(ctx context.Context, clientID, inputCallbackURL string) (string, error) {
+	client, err := s.GetClient(ctx, clientID)
+	if err != nil {
+		return "", err
+	}
+
+	if inputCallbackURL == "" || len(client.CallbackURLs) == 0 {
+		return "", &common.OidcMissingCallbackURLError{}
+	}
+
+	matched, err := utils.GetCallbackURLFromList(client.CallbackURLs, inputCallbackURL)
+	if err != nil {
+		return "", err
+	}
+	if matched == "" {
+		return "", &common.OidcInvalidCallbackURLError{}
+	}
+
+	return matched, nil
 }
 
 func (s *OidcService) getClientInternal(ctx context.Context, clientID string, tx *gorm.DB, forUpdate bool) (model.OidcClient, error) {
@@ -1358,15 +1387,23 @@ func (s *OidcService) ValidateEndSession(ctx context.Context, input dto.OidcLogo
 		return "", &common.OidcClientIdNotMatchingError{}
 	}
 
+	tx := s.db.Begin()
+	defer tx.Rollback()
+
 	// Check if the user has authorized the client before
 	var userAuthorizedOIDCClient model.UserAuthorizedOidcClient
-	err = s.db.
+	err = tx.
 		WithContext(ctx).
 		Preload("Client").
 		First(&userAuthorizedOIDCClient, "client_id = ? AND user_id = ?", clientID[0], userID).
 		Error
 	if err != nil {
 		return "", &common.OidcMissingAuthorizationError{}
+	}
+
+	// Delete all refresh tokens for this user
+	if err := tx.WithContext(ctx).Where("user_id = ?", userID).Delete(&model.OidcRefreshToken{}).Error; err != nil {
+		return "", err
 	}
 
 	// If the client has no logout callback URLs, return an error
@@ -1379,6 +1416,10 @@ func (s *OidcService) ValidateEndSession(ctx context.Context, input dto.OidcLogo
 		return "", err
 	}
 
+	if err := tx.Commit().Error; err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
 	return callbackURL, nil
 }
 
@@ -1388,7 +1429,10 @@ func (s *OidcService) createAuthorizationCode(ctx context.Context, clientID stri
 		return "", err
 	}
 
-	codeChallengeMethodSha256 := strings.ToUpper(codeChallengeMethod) == "S256"
+	codeChallengeMethodSha256, err := codeChallengeMethodIsSha256(codeChallengeMethod)
+	if err != nil {
+		return "", err
+	}
 
 	oidcAuthorizationCode := model.OidcAuthorizationCode{
 		ExpiresAt:                 datatype.DateTime(time.Now().Add(15 * time.Minute)),
@@ -1411,6 +1455,19 @@ func (s *OidcService) createAuthorizationCode(ctx context.Context, clientID stri
 	}
 
 	return randomString, nil
+}
+
+func codeChallengeMethodIsSha256(codeChallengeMethod string) (bool, error) {
+	switch strings.ToUpper(codeChallengeMethod) {
+	case "":
+		return false, nil
+	case "PLAIN":
+		return false, nil
+	case "S256":
+		return true, nil
+	default:
+		return false, common.NewOidcInvalidRequestError("code challenge method not supported")
+	}
 }
 
 func validateCodeVerifier(codeVerifier, codeChallenge string, codeChallengeMethodSha256 bool) bool {
@@ -1948,14 +2005,18 @@ func (s *OidcService) jwkSetForURL(ctx context.Context, url string) (set jwk.Set
 		// We set a timeout because otherwise Register will keep trying in case of errors
 		registerCtx, registerCancel := context.WithTimeout(ctx, 15*time.Second)
 		defer registerCancel()
-		// We need to register the URL
-		err = s.jwkCache.Register(
-			registerCtx,
-			url,
-			jwk.WithMaxInterval(24*time.Hour),
-			jwk.WithMinInterval(15*time.Minute),
+
+		registerOptions := []jwk.RegisterOption{
+			jwk.WithMaxInterval(24 * time.Hour),
+			jwk.WithMinInterval(15 * time.Minute),
 			jwk.WithWaitReady(true),
-		)
+		}
+		if s.httpClient != nil {
+			registerOptions = append(registerOptions, jwk.WithHTTPClient(s.httpClient))
+		}
+
+		// We need to register the URL
+		err = s.jwkCache.Register(registerCtx, url, registerOptions...)
 		// In case of race conditions (two goroutines calling jwkCache.Register at the same time), it's possible we can get a conflict anyways, so we ignore that error
 		if err != nil && !errors.Is(err, httprc.ErrResourceAlreadyExists()) {
 			return nil, fmt.Errorf("failed to register JWK set: %w", err)
@@ -2389,14 +2450,4 @@ func parsePromptParameter(prompt string) []string {
 		return []string{}
 	}
 	return strings.Fields(prompt)
-}
-
-// contains checks if a string slice contains a specific value
-func contains(slice []string, value string) bool {
-	for _, item := range slice {
-		if item == value {
-			return true
-		}
-	}
-	return false
 }

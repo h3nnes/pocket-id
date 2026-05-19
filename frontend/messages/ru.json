@@ -53,6 +53,8 @@
 	"webauthn_not_supported_by_browser": "Этот браузер не поддерживает ключи доступа. Попробуйте войти другим способом.",
 	"critical_error_occurred_contact_administrator": "Произошла критическая ошибка. Обратитесь к администратору.",
 	"sign_in_to": "Войти в {name}",
+	"account_selection_signin_confirmation": "Хочешь использовать следующую учетную запись, чтобы продолжить <b>{name}</b>?",
+	"use_a_different_account": "Воспользуйся другой учетной записью",
 	"client_not_found": "Клиент не найден",
 	"client_wants_to_access_the_following_information": "<b>{client}</b> запрашивает доступ к следующей информации:",
 	"do_you_want_to_sign_in_to_client_with_your_app_name_account": "Вы хотите войти в <b>{client}</b> с помощью вашей учетной записи {appName}?",
@@ -106,7 +108,7 @@
 	"ip_address": "IP-адрес",
 	"device": "Устройство",
 	"client": "Клиент",
-	"actor": "Актёр",
+	"actor": "Актор",
 	"unknown": "Неизвестно",
 	"account_details_updated_successfully": "Данные учетной записи успешно обновлены",
 	"profile_picture_updated_successfully": "Изображение профиля успешно обновлено. Обновление может занять несколько минут.",
@@ -118,7 +120,7 @@
 	"account_details": "Детали учетной записи",
 	"passkeys": "Ключи доступа",
 	"manage_your_passkeys_that_you_can_use_to_authenticate_yourself": "Управляйте своими ключами доступа, которые вы можете использовать для аутентификации.",
-	"manage_this_users_passkeys": "Управлять паролями этого пользователя.",
+	"manage_this_users_passkeys": "Управление ключами доступа этого пользователя.",
 	"add_passkey": "Добавить ключ доступа",
 	"create_a_one_time_login_code_to_sign_in_from_a_different_device_without_a_passkey": "Создайте одноразовый код входа, чтобы войти с другого устройства без ключа доступа.",
 	"create": "Создать",
@@ -367,7 +369,7 @@
 	"enter_code_displayed_in_previous_step": "Введите код, который был отображен на предыдущем шаге.",
 	"authorize": "Авторизовать",
 	"federated_client_credentials": "Федеративные учетные данные клиента",
-	"federated_client_credentials_description": "Федеративные учетные данные клиента позволяют аутентифицировать клиентов OIDC без необходимости управления долгосрочными секретами. Они используют токены JWT, выданные сторонними органами для утверждений клиента, например токены идентификации рабочей нагрузки.",
+	"federated_client_credentials_description": "Федеративные учетные данные клиента позволяют аутентифицировать OIDC-клиентов без необходимости управления долгоживущими секретами. Для подтверждения клиента (client assertions) они используют JWT-токены, выпущенные сторонними поставщиками, например, токены идентификации рабочих нагрузок.",
 	"add_federated_client_credential": "Добавить федеративные учетные данные клиента",
 	"add_another_federated_client_credential": "Добавить другие федеративные учетные данные клиента",
 	"oidc_allowed_group_count": "Число разрешенных групп",
@@ -524,5 +526,5 @@
 	"email_verification_sent": "Письмо с подтверждением успешно отправлено.",
 	"emails_verified_by_default": "Электронные почты подтверждены по умолчанию",
 	"emails_verified_by_default_description": "Если эта функция включена, адреса электронной почты пользователей будут по умолчанию помечаться как подтверждённые при регистрации или при смене адреса.",
-	"user_has_no_passkeys_yet": "У этого пользователя пока нет паролей."
+	"user_has_no_passkeys_yet": "У этого пользователя пока нет ключей доступа."
 }

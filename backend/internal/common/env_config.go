@@ -60,7 +60,7 @@ type EnvConfigSchema struct {
 	S3Region                        string `env:"S3_REGION"`
 	S3Endpoint                      string `env:"S3_ENDPOINT"`
 	S3AccessKeyID                   string `env:"S3_ACCESS_KEY_ID"`
-	S3SecretAccessKey               string `env:"S3_SECRET_ACCESS_KEY"`
+	S3SecretAccessKey               string `env:"S3_SECRET_ACCESS_KEY" options:"file"`
 	S3ForcePathStyle                bool   `env:"S3_FORCE_PATH_STYLE"`
 	S3DisableDefaultIntegrityChecks bool   `env:"S3_DISABLE_DEFAULT_INTEGRITY_CHECKS"`
 
@@ -347,6 +347,7 @@ func resolveFileBasedEnvVariable(field reflect.Value, fieldType reflect.StructFi
 		return nil
 	}
 
+	// #nosec G703 - Path is passed by the admin
 	fileContent, err := os.ReadFile(envVarFileValue)
 	if err != nil {
 		return fmt.Errorf("failed to read file for env var %s: %w", envVarFileName, err)
