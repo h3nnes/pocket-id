@@ -46,8 +46,13 @@ test.describe('API Key Management', () => {
 
 		// Verify the key appears in the list
 		await expect(page.getByRole('cell', { name }).first()).toContainText(name);
+		// Evaluate toLocaleString in the browser to match the browser's locale used by the UI
+		const expectedDateStr = await page.evaluate(
+			(dateMs) => new Date(dateMs).toLocaleString(),
+			expectedDate.getTime()
+		);
 		await expect(
-			page.getByRole('row', { name }).getByRole('cell', { name: expectedDate.toLocaleString() })
+			page.getByRole('row', { name }).getByRole('cell', { name: expectedDateStr })
 		).toBeVisible();
 	});
 
@@ -77,8 +82,13 @@ test.describe('API Key Management', () => {
 
 		// Verify the new expiration date is shown
 		const row = page.getByRole('row', { name: apiKey.name });
+		// Evaluate toLocaleDateString in the browser to match the browser's locale used by the UI
+		const expectedDateStr = await page.evaluate(
+			(dateMs) => new Date(dateMs).toLocaleDateString(),
+			expectedDate.getTime()
+		);
 		await expect(
-			row.getByRole('cell', { name: new RegExp(escapeRegExp(expectedDate.toLocaleDateString())) })
+			row.getByRole('cell', { name: new RegExp(escapeRegExp(expectedDateStr)) })
 		).toBeVisible();
 	});
 
