@@ -13,12 +13,15 @@ type OidcClientMetaDataDto struct {
 
 type OidcClientDto struct {
 	OidcClientMetaDataDto
-	CallbackURLs       []string                 `json:"callbackURLs"`
-	LogoutCallbackURLs []string                 `json:"logoutCallbackURLs"`
-	IsPublic           bool                     `json:"isPublic"`
-	PkceEnabled        bool                     `json:"pkceEnabled"`
-	Credentials        OidcClientCredentialsDto `json:"credentials"`
-	IsGroupRestricted  bool                     `json:"isGroupRestricted"`
+	CallbackURLs                        []string                 `json:"callbackURLs"`
+	LogoutCallbackURLs                  []string                 `json:"logoutCallbackURLs"`
+	IsPublic                            bool                     `json:"isPublic"`
+	PkceEnabled                         bool                     `json:"pkceEnabled"`
+	RequiresPushedAuthorizationRequests bool                     `json:"requiresPushedAuthorizationRequests"`
+	SkipConsent                         bool                     `json:"skipConsent"`
+	Credentials                         OidcClientCredentialsDto `json:"credentials"`
+	IsGroupRestricted                   bool                     `json:"isGroupRestricted"`
+	PkceSupported                       bool                     `json:"pkceSupported,omitempty"`
 }
 
 type OidcClientWithAllowedUserGroupsDto struct {
@@ -32,19 +35,21 @@ type OidcClientWithAllowedGroupsCountDto struct {
 }
 
 type OidcClientUpdateDto struct {
-	Name                     string                   `json:"name" binding:"required,max=50" unorm:"nfc"`
-	CallbackURLs             []string                 `json:"callbackURLs" binding:"omitempty,dive,callback_url_pattern"`
-	LogoutCallbackURLs       []string                 `json:"logoutCallbackURLs" binding:"omitempty,dive,callback_url_pattern"`
-	IsPublic                 bool                     `json:"isPublic"`
-	PkceEnabled              bool                     `json:"pkceEnabled"`
-	RequiresReauthentication bool                     `json:"requiresReauthentication"`
-	Credentials              OidcClientCredentialsDto `json:"credentials"`
-	LaunchURL                *string                  `json:"launchURL" binding:"omitempty,url"`
-	HasLogo                  bool                     `json:"hasLogo"`
-	HasDarkLogo              bool                     `json:"hasDarkLogo"`
-	LogoURL                  *string                  `json:"logoUrl"`
-	DarkLogoURL              *string                  `json:"darkLogoUrl"`
-	IsGroupRestricted        bool                     `json:"isGroupRestricted"`
+	Name                                string                   `json:"name" binding:"required,max=50" unorm:"nfc"`
+	CallbackURLs                        []string                 `json:"callbackURLs" binding:"omitempty,dive,callback_url_pattern"`
+	LogoutCallbackURLs                  []string                 `json:"logoutCallbackURLs" binding:"omitempty,dive,callback_url_pattern"`
+	IsPublic                            bool                     `json:"isPublic"`
+	PkceEnabled                         bool                     `json:"pkceEnabled"`
+	RequiresReauthentication            bool                     `json:"requiresReauthentication"`
+	RequiresPushedAuthorizationRequests bool                     `json:"requiresPushedAuthorizationRequests"`
+	SkipConsent                         bool                     `json:"skipConsent"`
+	Credentials                         OidcClientCredentialsDto `json:"credentials"`
+	LaunchURL                           *string                  `json:"launchURL" binding:"omitempty,url"`
+	HasLogo                             bool                     `json:"hasLogo"`
+	HasDarkLogo                         bool                     `json:"hasDarkLogo"`
+	LogoURL                             *string                  `json:"logoUrl"`
+	DarkLogoURL                         *string                  `json:"darkLogoUrl"`
+	IsGroupRestricted                   bool                     `json:"isGroupRestricted"`
 }
 
 type OidcClientCreateDto struct {
@@ -58,57 +63,17 @@ type OidcClientCredentialsDto struct {
 }
 
 type OidcClientFederatedIdentityDto struct {
-	Issuer   string `json:"issuer"`
-	Subject  string `json:"subject,omitempty"`
-	Audience string `json:"audience,omitempty"`
-	JWKS     string `json:"jwks,omitempty"`
+	Issuer           string `json:"issuer"`
+	Subject          string `json:"subject,omitempty"`
+	Audience         string `json:"audience,omitempty"`
+	JWKS             string `json:"jwks,omitempty"`
+	ReplayProtection bool   `json:"replayProtection"`
 }
 
 type OidcClientClaimRemappingDto struct {
 	ClaimName   string `json:"claimName" binding:"required,min=1,max=255"`
 	SourceType  string `json:"sourceType" binding:"required,oneof=user_field custom_claim static"`
 	SourceValue string `json:"sourceValue" binding:"required,min=1,max=1000"`
-}
-
-type AuthorizeOidcClientRequestDto struct {
-	ClientID              string `json:"clientID" binding:"required"`
-	Scope                 string `json:"scope" binding:"required"`
-	CallbackURL           string `json:"callbackURL" binding:"omitempty,callback_url"`
-	Nonce                 string `json:"nonce"`
-	CodeChallenge         string `json:"codeChallenge"`
-	CodeChallengeMethod   string `json:"codeChallengeMethod"`
-	ReauthenticationToken string `json:"reauthenticationToken"`
-	Prompt                string `json:"prompt"`
-	ResponseMode          string `json:"responseMode" binding:"omitempty,response_mode"`
-}
-
-type AuthorizeOidcClientResponseDto struct {
-	Code        string `json:"code"`
-	CallbackURL string `json:"callbackURL"`
-	Issuer      string `json:"issuer"`
-}
-
-type AuthorizationRequiredDto struct {
-	ClientID string `json:"clientID" binding:"required"`
-	Scope    string `json:"scope" binding:"required"`
-}
-
-type OidcCreateTokensDto struct {
-	GrantType           string `form:"grant_type" binding:"required"`
-	Code                string `form:"code"`
-	DeviceCode          string `form:"device_code"`
-	ClientID            string `form:"client_id"`
-	ClientSecret        string `form:"client_secret"`
-	CodeVerifier        string `form:"code_verifier"`
-	RefreshToken        string `form:"refresh_token"`
-	ClientAssertion     string `form:"client_assertion"`
-	ClientAssertionType string `form:"client_assertion_type"`
-	Resource            string `form:"resource"`
-}
-
-type OidcIntrospectDto struct {
-	Token    string `form:"token" binding:"required"`
-	ClientID string `form:"client_id"`
 }
 
 type OidcUpdateAllowedUserGroupsDto struct {
@@ -122,36 +87,6 @@ type OidcLogoutDto struct {
 	State                 string `form:"state"`
 }
 
-type OidcTokenResponseDto struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	IdToken      string `json:"id_token,omitempty"`
-	RefreshToken string `json:"refresh_token,omitempty"`
-	ExpiresIn    int    `json:"expires_in"`
-}
-
-type OidcIntrospectionResponseDto struct {
-	Active     bool     `json:"active"`
-	TokenType  string   `json:"token_type,omitempty"`
-	Scope      string   `json:"scope,omitempty"`
-	Expiration int64    `json:"exp,omitempty"`
-	IssuedAt   int64    `json:"iat,omitempty"`
-	NotBefore  int64    `json:"nbf,omitempty"`
-	Subject    string   `json:"sub,omitempty"`
-	Audience   []string `json:"aud,omitempty"`
-	Issuer     string   `json:"iss,omitempty"`
-	Identifier string   `json:"jti,omitempty"`
-}
-
-type OidcDeviceAuthorizationRequestDto struct {
-	ClientID            string `form:"client_id" binding:"required"`
-	Scope               string `form:"scope" binding:"required"`
-	ClientSecret        string `form:"client_secret"`
-	ClientAssertion     string `form:"client_assertion"`
-	ClientAssertionType string `form:"client_assertion_type"`
-	Nonce               string `form:"nonce"`
-}
-
 type OidcDeviceAuthorizationResponseDto struct {
 	DeviceCode              string `json:"device_code"`
 	UserCode                string `json:"user_code"`
@@ -159,20 +94,13 @@ type OidcDeviceAuthorizationResponseDto struct {
 	VerificationURIComplete string `json:"verification_uri_complete"`
 	ExpiresIn               int    `json:"expires_in"`
 	Interval                int    `json:"interval"`
-	RequiresAuthorization   bool   `json:"requires_authorization"`
-}
-
-type OidcDeviceTokenRequestDto struct {
-	GrantType    string `form:"grant_type" binding:"required,eq=urn:ietf:params:oauth:grant-type:device_code"`
-	DeviceCode   string `form:"device_code" binding:"required"`
-	ClientID     string `form:"client_id"`
-	ClientSecret string `form:"client_secret"`
 }
 
 type DeviceCodeInfoDto struct {
-	Scope                 string                `json:"scope"`
-	AuthorizationRequired bool                  `json:"authorizationRequired"`
-	Client                OidcClientMetaDataDto `json:"client"`
+	Scope                    []string              `json:"scope"`
+	AuthorizationRequired    bool                  `json:"authorizationRequired"`
+	ReauthenticationRequired bool                  `json:"reauthenticationRequired"`
+	Client                   OidcClientMetaDataDto `json:"client"`
 }
 
 type AuthorizedOidcClientDto struct {

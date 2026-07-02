@@ -84,8 +84,8 @@ func (wkc *WellKnownController) computeOIDCConfiguration() ([]byte, error) {
 		"device_authorization_endpoint":                  appUrl + "/api/oidc/device/authorize",
 		"jwks_uri":                                       internalAppUrl + "/.well-known/jwks.json",
 		"grant_types_supported":                          []string{service.GrantTypeAuthorizationCode, service.GrantTypeRefreshToken, service.GrantTypeDeviceCode, service.GrantTypeClientCredentials},
-		"scopes_supported":                               []string{"openid", "profile", "email", "groups"},
-		"claims_supported":                               []string{"sub", "given_name", "family_name", "name", "email", "email_verified", "preferred_username", "picture", "groups"},
+		"scopes_supported":                               []string{"openid", "profile", "email", "groups", "offline_access"},
+		"claims_supported":                               []string{"sub", "given_name", "family_name", "name", "display_name", "email", "email_verified", "preferred_username", "picture", "groups", "auth_time", "amr"},
 		"response_types_supported":                       []string{"code", "id_token"},
 		"subject_types_supported":                        []string{"public"},
 		"id_token_signing_alg_values_supported":          []string{alg.String()},
@@ -93,6 +93,8 @@ func (wkc *WellKnownController) computeOIDCConfiguration() ([]byte, error) {
 		"code_challenge_methods_supported":               []string{"plain", "S256"},
 		"prompt_values_supported":                        []string{"none", "login", "consent", "select_account"},
 		"token_endpoint_auth_methods_supported":          []string{"client_secret_basic", "client_secret_post", "none"},
+		"pushed_authorization_request_endpoint":          internalAppUrl + "/api/oidc/par",
+		"require_pushed_authorization_requests":          false,
 	}
 	return json.Marshal(config)
 }

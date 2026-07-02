@@ -12,6 +12,7 @@ import (
 	"github.com/pocket-id/pocket-id/backend/internal/middleware"
 	"github.com/pocket-id/pocket-id/backend/internal/service"
 	"github.com/pocket-id/pocket-id/backend/internal/utils"
+	"github.com/pocket-id/pocket-id/backend/internal/webauthn"
 	"golang.org/x/time/rate"
 )
 
@@ -21,7 +22,7 @@ const defaultOneTimeAccessTokenDuration = 15 * time.Minute
 // @Summary User management controller
 // @Description Initializes all user-related API endpoints
 // @Tags Users
-func NewUserController(group *gin.RouterGroup, authMiddleware *middleware.AuthMiddleware, rateLimitMiddleware *middleware.RateLimitMiddleware, userService *service.UserService, oneTimeAccessService *service.OneTimeAccessService, webAuthnService *service.WebAuthnService, appConfigService *service.AppConfigService) {
+func NewUserController(group *gin.RouterGroup, authMiddleware *middleware.AuthMiddleware, rateLimitMiddleware *middleware.RateLimitMiddleware, userService *service.UserService, oneTimeAccessService *service.OneTimeAccessService, webAuthnService *webauthn.Module, appConfigService *service.AppConfigService) {
 	uc := UserController{
 		userService:          userService,
 		oneTimeAccessService: oneTimeAccessService,
@@ -63,7 +64,7 @@ func NewUserController(group *gin.RouterGroup, authMiddleware *middleware.AuthMi
 type UserController struct {
 	userService          *service.UserService
 	oneTimeAccessService *service.OneTimeAccessService
-	webAuthnService      *service.WebAuthnService
+	webAuthnService      *webauthn.Module
 	appConfigService     *service.AppConfigService
 }
 
@@ -508,8 +509,15 @@ func (uc *UserController) RequestOneTimeAccessEmailAsAdminHandler(c *gin.Context
 // @Success 200 {object} dto.UserDto
 // @Router /api/one-time-access-token/{token} [post]
 func (uc *UserController) exchangeOneTimeAccessTokenHandler(c *gin.Context) {
+	loginCode := c.Param("token")
+	// reject invalid length login codes
+	if len(loginCode) != 6 && len(loginCode) != 16 {
+		_ = c.Error(&common.TokenInvalidOrExpiredError{})
+		return
+	}
+
 	deviceToken, _ := c.Cookie(cookie.DeviceTokenCookieName)
-	user, token, err := uc.oneTimeAccessService.ExchangeOneTimeAccessToken(c.Request.Context(), c.Param("token"), deviceToken, c.ClientIP(), c.Request.UserAgent())
+	user, token, err := uc.oneTimeAccessService.ExchangeOneTimeAccessToken(c.Request.Context(), loginCode, deviceToken, c.ClientIP(), c.Request.UserAgent())
 	if err != nil {
 		_ = c.Error(err)
 		return

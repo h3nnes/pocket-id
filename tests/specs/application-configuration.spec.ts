@@ -18,14 +18,13 @@ test('Update general configuration', async ({ page }) => {
 	await expect(page.locator('[data-type="success"]')).toHaveText(
 		'Application configuration updated successfully'
 	);
-	await expect(page.getByTestId('application-name')).toHaveText('Updated Name');
 
 	await page.reload();
 
 	await expect(page.getByLabel('Application Name', { exact: true })).toHaveValue('Updated Name');
 	await expect(page.getByLabel('Session Duration')).toHaveValue('30');
 
-	await page.getByRole('link', { name: 'Logo Updated Name' }).click();
+	await page.getByRole('link', { name: 'Logo' }).click();
 	await page.waitForURL('/settings/apps');
 });
 
@@ -50,10 +49,15 @@ test.describe('Update user creation configuration', () => {
 	});
 
 	test('should save default user groups for new signups', async ({ page }) => {
+		const developersOption = page.getByRole('option', { name: 'Developers' });
+		const designersOption = page.getByRole('option', { name: 'Designers' });
+
 		await page.getByRole('combobox', { name: 'User Groups' }).click();
-		await page.getByRole('option', { name: 'Developers' }).click();
-		await page.getByRole('option', { name: 'Designers' }).click();
-		await page.getByRole('combobox', { name: 'User Groups' }).click();
+		await developersOption.click();
+		await expect(developersOption).toBeChecked();
+		await designersOption.click();
+		await expect(designersOption).toBeChecked();
+		await page.keyboard.press('Escape');
 
 		await page.getByRole('button', { name: 'Save' }).nth(1).click();
 

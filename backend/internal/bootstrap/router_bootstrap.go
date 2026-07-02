@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -110,7 +109,7 @@ func registerGlobalMiddleware(r *gin.Engine) {
 
 func registerRoutes(r *gin.Engine, db *gorm.DB, svc *services) error {
 
-	err := frontend.RegisterFrontend(r, svc.oidcService)
+	err := frontend.RegisterFrontend(r)
 	if errors.Is(err, frontend.ErrFrontendNotIncluded) {
 		slog.Warn("Frontend is not included in the build. Skipping frontend registration.")
 	} else if err != nil {
@@ -118,15 +117,25 @@ func registerRoutes(r *gin.Engine, db *gorm.DB, svc *services) error {
 	}
 
 	// Initialize middleware for specific routes
-	authMiddleware := middleware.NewAuthMiddleware(svc.apiKeyService, svc.userService, svc.jwtService)
+	authMiddleware := middleware.NewAuthMiddleware(svc.apiKeyModule, svc.userService, svc.jwtService)
 	fileSizeLimitMiddleware := middleware.NewFileSizeLimitMiddleware()
 	apiRateLimitMiddleware := middleware.NewRateLimitMiddleware().Add(rate.Every(time.Second), 100)
 
 	apiGroup := r.Group("/api", apiRateLimitMiddleware)
-	controller.NewApiKeyController(apiGroup, authMiddleware, svc.apiKeyService)
-	controller.NewWebauthnController(apiGroup, authMiddleware, middleware.NewRateLimitMiddleware(), svc.webauthnService, svc.appConfigService)
-	controller.NewOidcController(apiGroup, authMiddleware, fileSizeLimitMiddleware, svc.oidcService, svc.jwtService)
-	controller.NewUserController(apiGroup, authMiddleware, middleware.NewRateLimitMiddleware(), svc.userService, svc.oneTimeAccessService, svc.webauthnService, svc.appConfigService)
+	baseGroup := r.Group("/", apiRateLimitMiddleware)
+
+	svc.apiKeyModule.RegisterRoutes(apiGroup,
+		authMiddleware.WithAdminNotRequired().Add(),
+		authMiddleware.WithAdminNotRequired().WithApiKeyAuthDisabled().Add(),
+	)
+	webauthnRateLimitMiddleware := middleware.NewRateLimitMiddleware()
+	svc.webauthnModule.RegisterRoutes(apiGroup,
+		authMiddleware.WithAdminNotRequired().Add(),
+		webauthnRateLimitMiddleware.Add(rate.Every(10*time.Second), 5),
+		webauthnRateLimitMiddleware.Add(rate.Every(10*time.Second), 5),
+	)
+	controller.NewOidcController(apiGroup, authMiddleware, fileSizeLimitMiddleware, svc.oidcService)
+	controller.NewUserController(apiGroup, authMiddleware, middleware.NewRateLimitMiddleware(), svc.userService, svc.oneTimeAccessService, svc.webauthnModule, svc.appConfigService)
 	controller.NewAppConfigController(apiGroup, authMiddleware, svc.appConfigService, svc.emailService, svc.ldapService)
 	controller.NewAppImagesController(apiGroup, authMiddleware, svc.appImagesService)
 	controller.NewAuditLogController(apiGroup, svc.auditLogService, authMiddleware)
@@ -134,11 +143,17 @@ func registerRoutes(r *gin.Engine, db *gorm.DB, svc *services) error {
 	controller.NewCustomClaimController(apiGroup, authMiddleware, svc.customClaimService)
 	controller.NewVersionController(apiGroup, authMiddleware, svc.versionService)
 	controller.NewScimController(apiGroup, authMiddleware, svc.scimService)
-	controller.NewUserSignupController(apiGroup, authMiddleware, middleware.NewRateLimitMiddleware(), svc.userSignUpService, svc.appConfigService)
+	svc.userSignUpModule.RegisterRoutes(apiGroup,
+		authMiddleware.Add(),
+		middleware.NewRateLimitMiddleware().Add(rate.Every(1*time.Minute), 10),
+	)
+
+	optionalBrowserAuth := authMiddleware.WithAdminNotRequired().WithSuccessOptional().WithApiKeyAuthDisabled().Add()
+	browserAuth := authMiddleware.WithAdminNotRequired().WithApiKeyAuthDisabled().Add()
+	svc.oidcModule.RegisterRoutes(baseGroup, apiGroup, optionalBrowserAuth, browserAuth)
 
 	registerTestRoutes(apiGroup, db, svc)
 
-	baseGroup := r.Group("/", apiRateLimitMiddleware)
 	controller.NewWellKnownController(baseGroup, svc.jwtService)
 
 	// These are not rate-limited.
@@ -163,24 +178,26 @@ func initServer(r *gin.Engine) (*serverConfig, error) {
 		return nil, err
 	}
 
-	network, addr := listenerNetworkAndAddr()
-	listener, err := net.Listen(network, addr) //nolint:noctx
-	if err != nil {
-		return nil, fmt.Errorf("failed to create %s listener: %w", network, err)
+	var socketFn func() (*socket, error)
+	switch {
+	case common.EnvConfig.SystemdSocket:
+		socketFn = systemdSocket
+	case common.EnvConfig.UnixSocket != "":
+		socketFn = unixSocket
+	default:
+		socketFn = tcpSocket
 	}
 
-	if err := setUnixSocketMode(network, addr); err != nil {
-		listener.Close()
+	socket, err := socketFn()
+	if err != nil {
 		return nil, err
 	}
 
-	return &serverConfig{
-		addr:         addr,
-		certProvider: certProvider,
-		listener:     listener,
-		server:       newHTTPServer(r, protocols),
-		tlsConfig:    tlsConfig,
-	}, nil
+	addr := socket.addr
+	listener := socket.listener
+	server := newHTTPServer(r, protocols)
+
+	return &serverConfig{addr, certProvider, listener, server, tlsConfig}, nil
 }
 
 func initServerProtocols() (*http.Protocols, *tls.Config, *tlsCertProvider, error) {
@@ -225,33 +242,6 @@ func newHTTPServer(r *gin.Engine, protocols *http.Protocols) *http.Server {
 			r.ServeHTTP(w, req)
 		}),
 	}
-}
-
-func listenerNetworkAndAddr() (string, string) {
-	if common.EnvConfig.UnixSocket == "" {
-		return "tcp", net.JoinHostPort(common.EnvConfig.Host, common.EnvConfig.Port)
-	}
-
-	addr := common.EnvConfig.UnixSocket
-	os.Remove(addr) // remove dangling the socket file to avoid file-exist error
-	return "unix", addr
-}
-
-func setUnixSocketMode(network, addr string) error {
-	if network != "unix" || common.EnvConfig.UnixSocketMode == "" {
-		return nil
-	}
-
-	mode, err := strconv.ParseUint(common.EnvConfig.UnixSocketMode, 8, 32)
-	if err != nil {
-		return fmt.Errorf("failed to parse UNIX socket mode '%s': %w", common.EnvConfig.UnixSocketMode, err)
-	}
-
-	if err := os.Chmod(addr, os.FileMode(mode)); err != nil {
-		return fmt.Errorf("failed to set UNIX socket mode '%s': %w", common.EnvConfig.UnixSocketMode, err)
-	}
-
-	return nil
 }
 
 func runServer(ctx context.Context, config *serverConfig) error {

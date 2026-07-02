@@ -14,6 +14,7 @@ export type OidcClientFederatedIdentity = {
 	subject?: string;
 	audience?: string;
 	jwks?: string | undefined;
+	replayProtection: boolean;
 };
 
 export type ClaimRemappingSourceType = 'user_field' | 'custom_claim' | 'static';
@@ -35,9 +36,12 @@ export type OidcClient = OidcClientMetaData & {
 	isPublic: boolean;
 	pkceEnabled: boolean;
 	requiresReauthentication: boolean;
+	requiresPushedAuthorizationRequests: boolean;
+	skipConsent: boolean;
 	credentials?: OidcClientCredentials;
 	launchURL?: string;
 	isGroupRestricted: boolean;
+	pkceSupported: boolean;
 };
 
 export type OidcClientWithAllowedUserGroups = OidcClient & {
@@ -48,7 +52,7 @@ export type OidcClientWithAllowedUserGroupsCount = OidcClient & {
 	allowedUserGroupsCount: number;
 };
 
-export type OidcClientUpdate = Omit<OidcClient, 'id' | 'logoURL' | 'hasLogo' | 'hasDarkLogo'>;
+export type OidcClientUpdate = Omit<OidcClient, 'id' | 'logoURL' | 'hasLogo' | 'hasDarkLogo' | 'pkceSupported'>;
 export type OidcClientCreate = OidcClientUpdate & {
 	id?: string;
 };
@@ -65,19 +69,27 @@ export type OidcClientCreateWithLogo = OidcClientCreate & {
 };
 
 export type OidcDeviceCodeInfo = {
-	scope: string;
+	scope: string[];
 	authorizationRequired: boolean;
+	reauthenticationRequired: boolean;
 	client: OidcClientMetaData;
-};
-
-export type AuthorizeResponse = {
-	code?: string;
-	callbackURL?: string;
-	issuer?: string;
-	error?: string;
-	requiresRedirect?: boolean;
 };
 
 export type AccessibleOidcClient = OidcClientMetaData & {
 	lastUsedAt: Date | null;
+};
+
+export type InteractionStep = 'authenticate' | 'select_account' | 'reauthenticate' | 'consent';
+
+export type InteractionSession = {
+	id: string;
+	scopes: string[];
+	client: OidcClientMetaData;
+	currentStep?: InteractionStep;
+	requiredSteps: InteractionStep[];
+};
+
+export type CompleteInteractionResponse = {
+	interaction?: InteractionSession;
+	redirectUrl?: string;
 };
