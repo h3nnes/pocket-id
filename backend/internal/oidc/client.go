@@ -41,7 +41,11 @@ func (c Client) GetResponseTypes() fosite.Arguments {
 }
 
 func (c Client) GetScopes() fosite.Arguments {
-	return fosite.Arguments{"openid", "profile", "email", "groups", "offline_access"}
+	// Return a wildcard so any scope is accepted; Pocket ID does not restrict which scopes
+	// clients may request — the standard scopes (openid, profile, email, groups) map to
+	// built-in claims, and anything else passes through without error so third-party apps
+	// that request custom or application-specific scopes (e.g. mailcow) are not rejected
+	return fosite.Arguments{"*"}
 }
 
 func (c Client) IsPublic() bool {

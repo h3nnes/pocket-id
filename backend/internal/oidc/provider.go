@@ -44,7 +44,7 @@ func newProvider(store *Store, authenticator *federatedClientAuthenticator, sign
 		IDTokenIssuer:                  config.BaseURL,
 		AccessTokenIssuer:              config.BaseURL,
 		TokenURL:                       config.TokenBaseURL + "/api/oidc/token",
-		ScopeStrategy:                  fosite.ExactScopeStrategy,
+		ScopeStrategy:                  fosite.WildcardScopeStrategy,
 		AudienceMatchingStrategy:       fosite.ExactAudienceMatchingStrategy,
 		RedirectURIMatcher:             matchRedirectURI,
 		EnforcePKCEForPublicClients:    true,

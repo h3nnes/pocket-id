@@ -58,10 +58,14 @@ func TestClientPreviewBuilderUsesFositeTokenStrategies(t *testing.T) {
 	require.Equal(t, true, preview.UserInfo["email_verified"])
 }
 
-func TestClientPreviewBuilderRejectsInvalidScope(t *testing.T) {
+func TestClientPreviewBuilderAcceptsUnknownScope(t *testing.T) {
+	// Pocket ID accepts any scope (wildcard strategy) so third-party apps that request
+	// custom or application-specific scopes (e.g. mailcow) are not rejected with invalid_scope
 	db := testutils.NewDatabaseForTest(t)
 	signerKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
+
+	require.NoError(t, db.Create(&model.User{Base: model.Base{ID: "test-user"}, Username: "test"}).Error)
 
 	provider, err := newProvider(NewStore(db), nil, testTokenSigner{key: signerKey}, Config{ //nolint:gosec // static test-only provider secret
 		BaseURL:      "https://issuer.example.com",
@@ -75,8 +79,7 @@ func TestClientPreviewBuilderRejectsInvalidScope(t *testing.T) {
 		Base: model.Base{ID: "test-client"},
 		Name: "Test Client",
 	}, "test-user", []string{"openid", "unknown"}, "")
-	require.Error(t, err)
-	require.ErrorContains(t, err, "invalid_scope")
+	require.NoError(t, err)
 }
 
 func stringSliceClaim(t *testing.T, value any) []string {
