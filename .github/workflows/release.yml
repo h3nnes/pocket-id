@@ -9,12 +9,13 @@ on:
 permissions:
   contents: write
   packages: write
-  attestations: write
-  artifact-metadata: write
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
+
+    env:
+      CONTAINER_IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/pocket-id
 
     steps:
       - name: Checkout code
@@ -22,67 +23,58 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v4
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          images: ${{ env.CONTAINER_IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},prefix=v
+            type=semver,pattern={{major}}.{{minor}},prefix=v
+            type=semver,pattern={{major}},prefix=v
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.authors=Pocket ID
+            org.opencontainers.image.url=https://github.com/pocket-id/pocket-id
+            org.opencontainers.image.documentation=https://github.com/pocket-id/pocket-id/blob/main/README.md
+            org.opencontainers.image.source=https://github.com/pocket-id/pocket-id
+            org.opencontainers.image.licenses=BSD-2-Clause
+            org.opencontainers.image.ref.name=pocket-id
+            org.opencontainers.image.title=Pocket ID
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
+      - name: Build and push container image
+        id: container-build-push
+        uses: docker/build-push-action@v6
         with:
-          distribution: goreleaser-pro
-          version: "~> v2"
-          args: release --clean --skip=validate --parallelism=4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-          DISCORD_WEBHOOK_ID: ${{ secrets.DISCORD_WEBHOOK_ID }}
-          DISCORD_WEBHOOK_TOKEN: ${{ secrets.DISCORD_WEBHOOK_TOKEN }}
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Binary attestation
-        uses: actions/attest@v4
-        with:
-          subject-checksums: ./dist/checksums.txt
-
-      - name: Container image attestation
-        uses: actions/attest@v4
-        with:
-          subject-checksums: ./dist/digests.txt
-
-      - name: Publish release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  publish-release:
+    runs-on: ubuntu-latest
+    needs: [build]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Mark release as published
         run: gh release edit ${{ github.ref_name }} --draft=false
