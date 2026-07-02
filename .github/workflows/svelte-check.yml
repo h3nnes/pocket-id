@@ -25,14 +25,13 @@ permissions:
   contents: read
   checks: write
   pull-requests: write
-  id-token: write
 
 jobs:
   type-check:
     name: Run Svelte Check
     # Don't run on dependabot branches
     if: github.actor != 'dependabot[bot]'
-    runs-on: depot-ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code

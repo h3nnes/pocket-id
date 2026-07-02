@@ -16,12 +16,11 @@ on:
 permissions:
   contents: read
   actions: write
-  id-token: write
 
 jobs:
   test:
     if: github.event.pull_request.head.ref != 'i18n_crowdin'
-    runs-on: depot-ubuntu-24.04-32
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -50,11 +49,8 @@ jobs:
           node-version: 24
           cache: "pnpm"
 
-      - name: Set up Depot CLI
-        uses: depot/setup-action@v1
-
-      - name: Set up Depot Docker builder
-        run: depot configure-docker
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Cache Playwright Browsers
         uses: actions/cache@v5

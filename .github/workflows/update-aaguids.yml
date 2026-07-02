@@ -8,11 +8,10 @@ on:
 permissions:
   contents: write
   pull-requests: write
-  id-token: write
 
 jobs:
   update-aaguids:
-    runs-on: depot-ubuntu-latest
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
