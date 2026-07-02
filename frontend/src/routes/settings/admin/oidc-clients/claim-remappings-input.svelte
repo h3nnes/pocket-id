@@ -100,7 +100,7 @@
 					<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
 						<!-- Claim Name -->
 						<div>
-							<Label required for="claim-name-{i}" class="text-xs">Claim Name</Label>
+							<Label for="claim-name-{i}" class="text-xs">Claim Name</Label>
 							<Input
 								id="claim-name-{i}"
 								placeholder="email"
@@ -115,7 +115,7 @@
 
 						<!-- Source Type -->
 						<div>
-							<Label required for="source-type-{i}" class="text-xs">Source Type</Label>
+							<Label for="source-type-{i}" class="text-xs">Source Type</Label>
 							<Select.Root
 								type="single"
 								value={remapping.sourceType}
@@ -141,7 +141,7 @@
 
 						<!-- Source Value -->
 						<div>
-							<Label required for="source-value-{i}" class="text-xs">Source Value</Label>
+							<Label for="source-value-{i}" class="text-xs">Source Value</Label>
 							{#if remapping.sourceType === 'user_field'}
 								<Select.Root
 									type="single"
