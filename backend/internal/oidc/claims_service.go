@@ -33,8 +33,7 @@ func newClaimsService(db *gorm.DB, customClaims CustomClaimSource, baseURL strin
 	}
 }
 
-// ValidateUserAccess re-checks, at token-issuance time, that the user behind a grant is
-// still allowed to obtain tokens for the client.
+// ValidateUserAccess re-checks, at token-issuance time, that the user behind a grant is still allowed to obtain tokens for the client.
 func (s *ClaimsService) ValidateUserAccess(ctx context.Context, userID string, client Client) error {
 	// Grants without a resource owner (e.g. client_credentials) carry an empty subject
 	// and have no user to validate.
@@ -66,23 +65,22 @@ func (s *ClaimsService) ValidateUserAccess(ctx context.Context, userID string, c
 }
 
 // applyIDTokenClaims applies the claims of a user to the ID token claims in the session based on the requested scopes.
-func (s *ClaimsService) applyIDTokenClaims(ctx context.Context, session *Session, scopes fosite.Arguments) error {
+// The client is passed through so per-client claim remappings are applied to the ID token, not just the userinfo endpoint.
+func (s *ClaimsService) applyIDTokenClaims(ctx context.Context, session *Session, scopes fosite.Arguments, client *model.OidcClient) error {
 	userID := session.Subject
 	if userID == "" {
 		return nil
 	}
 
-	claims, err := s.GetUserClaims(ctx, userID, scopes, nil)
+	claims, err := s.GetUserClaims(ctx, userID, scopes, client)
 	if err != nil {
 		return err
 	}
 
-	// Record the signing algorithm on the ID token header so fosite derives the at_hash/
-	// c_hash digest from it (e.g. RS384 -> SHA-384, ES512 -> SHA-512). Without this the
-	// header is empty and fosite defaults to SHA-256, producing wrong hashes whenever the
-	// signing key is not a 256-bit algorithm. ToMap() strips "alg" before signing, so this
-	// never overrides the real JWS header. The signer is always wired in production; it is
-	// only nil in unit tests that do not assert hash correctness.
+	// Record the signing algorithm on the ID token header so fosite derives the at_hash/c_hash digest from it (e.g. RS384 -> SHA-384, ES512 -> SHA-512)
+	// Without this the header is empty and fosite defaults to SHA-256, producing wrong hashes whenever the signing key is not a 256-bit algorithm
+	// ToMap() strips "alg" before signing, so this never overrides the real JWS header
+	// The signer is always wired in production; it is only nil in unit tests that do not assert hash correctness
 	if s.signer != nil {
 		alg, err := s.signer.GetKeyAlg()
 		if err != nil {
@@ -191,20 +189,13 @@ func (s *ClaimsService) GetUserClaims(ctx context.Context, userID string, scopes
 
 // applyClaimRemappings applies the client's configured claim remapping rules to the claims map.
 // Each rule overwrites a named claim with a value drawn from a user field, a custom claim key, or a static value.
-// When the source value is not found (e.g. the user has no email, or the custom claim key does not exist),
-// the rule is skipped and the original claim value is preserved.
+// When the source value is not found (e.g. the user has no email, or the custom claim key does not exist), the rule is skipped and the original claim value is preserved.
 func (s *ClaimsService) applyClaimRemappings(
 	claims map[string]any,
 	remappings []model.OidcClientClaimRemapping,
 	user *model.User,
 	customClaimsMap map[string]any,
 ) error {
-	// Snapshot original values so we can fall back when a remapping source is absent
-	originalClaims := make(map[string]any, len(claims))
-	for k, v := range claims {
-		originalClaims[k] = v
-	}
-
 	for _, remapping := range remappings {
 		var remappedValue any
 		var foundValue bool
@@ -257,21 +248,16 @@ func (s *ClaimsService) applyClaimRemappings(
 			slog.Debug(
 				"Applying claim remapping",
 				"claim", remapping.ClaimName,
-				"oldValue", originalClaims[remapping.ClaimName],
 				"newValue", remappedValue,
 			)
 			claims[remapping.ClaimName] = remappedValue
 		} else {
 			slog.Debug(
-				"Claim remapping source not found, using fallback",
+				"Claim remapping source not found, skipping",
 				"claim", remapping.ClaimName,
 				"sourceType", remapping.SourceType,
 				"sourceValue", remapping.SourceValue,
 			)
-			// Preserve the original value when the remapping source does not exist
-			if originalValue, exists := originalClaims[remapping.ClaimName]; exists {
-				claims[remapping.ClaimName] = originalValue
-			}
 		}
 	}
 

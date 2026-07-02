@@ -113,7 +113,7 @@ func (s *deviceService) acceptDeviceCode(ctx context.Context, userCode, userID, 
 
 		session := NewAuthenticatedSession(userID, authenticationMethod, authenticationTime, request.GetRequestedAt())
 
-		if err = s.claimsService.applyIDTokenClaims(ctx, session, request.GetGrantedScopes()); err != nil {
+		if err = s.claimsService.applyIDTokenClaims(ctx, session, request.GetGrantedScopes(), &client.OidcClient); err != nil {
 			return err
 		}
 		request.SetSession(session)

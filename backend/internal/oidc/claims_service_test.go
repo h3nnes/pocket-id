@@ -152,9 +152,7 @@ func TestClaimsServiceGetUserClaims(t *testing.T) {
 	})
 }
 
-// TestClaimsServiceAppliesSigningAlgToIDTokenHeader verifies the ID token header carries the
-// signing algorithm so fosite derives the at_hash/c_hash digest from it (e.g. RS384 ->
-// SHA-384, ES512 -> SHA-512) instead of always defaulting to SHA-256.
+// TestClaimsServiceAppliesSigningAlgToIDTokenHeader verifies the ID token header carries the signing algorithm so fosite derives the at_hash/c_hash digest from it (e.g. RS384 -> SHA-384, ES512 -> SHA-512) instead of always defaulting to SHA-256.
 func TestClaimsServiceAppliesSigningAlgToIDTokenHeader(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 	require.NoError(t, db.Create(&model.User{Base: model.Base{ID: "alg-user"}, Username: "alg"}).Error)
@@ -166,7 +164,7 @@ func TestClaimsServiceAppliesSigningAlgToIDTokenHeader(t *testing.T) {
 			session := NewEmptySession()
 			session.Subject = "alg-user"
 
-			require.NoError(t, service.applyIDTokenClaims(t.Context(), session, fosite.Arguments{"openid"}))
+			require.NoError(t, service.applyIDTokenClaims(t.Context(), session, fosite.Arguments{"openid"}, nil))
 			require.Equal(t, alg.String(), session.IDTokenHeaders().Get("alg"))
 		})
 	}
@@ -177,6 +175,7 @@ func TestClaimsServiceAppliesSigningAlgToIDTokenHeader(t *testing.T) {
 // and static JSON is decoded while plain strings are kept as strings.
 func TestClaimsServiceApplyClaimRemappings(t *testing.T) {
 	service := &ClaimsService{}
+	// ClaimsService is empty because applyClaimRemappings only uses its parameters, not the receiver
 
 	email := "work@example.com"
 	user := &model.User{

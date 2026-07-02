@@ -163,7 +163,7 @@ func (s *authorizationService) authorize(ctx context.Context, input authorizeInp
 		return result, nil
 	}
 
-	if err := s.claimsService.applyIDTokenClaims(ctx, result.Session, input.requester.GetGrantedScopes()); err != nil {
+	if err := s.claimsService.applyIDTokenClaims(ctx, result.Session, input.requester.GetGrantedScopes(), &client.OidcClient); err != nil {
 		return authorizationResult{}, err
 	}
 

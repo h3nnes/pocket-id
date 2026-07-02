@@ -5,6 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ory/fosite"
+
+	"github.com/pocket-id/pocket-id/backend/internal/model"
 )
 
 type tokenHandler struct {
@@ -52,7 +54,13 @@ func (h *tokenHandler) token(c *gin.Context) {
 		accessRequest.GrantAudience(client.GetID())
 	}
 
-	if err := h.claimsService.applyIDTokenClaims(ctx, requestSession, accessRequest.GetGrantedScopes()); err != nil {
+	// Extract the OidcClient so claim remappings are applied to the issued ID token
+	var oidcClient *model.OidcClient
+	if c, ok := accessRequest.GetClient().(Client); ok {
+		oidcClient = &c.OidcClient
+	}
+
+	if err := h.claimsService.applyIDTokenClaims(ctx, requestSession, accessRequest.GetGrantedScopes(), oidcClient); err != nil {
 		slog.ErrorContext(ctx, "Failed to apply ID token claims", "error", err)
 		h.provider.WriteAccessError(ctx, c.Writer, accessRequest, err)
 		return
