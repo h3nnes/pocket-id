@@ -19,7 +19,7 @@ func TestClientPreviewBuilderUsesFositeTokenStrategies(t *testing.T) {
 	provider, err := newProvider(NewStore(db), nil, testTokenSigner{key: signerKey}, Config{ //nolint:gosec // static test-only provider secret
 		BaseURL:      "https://issuer.example.com",
 		TokenBaseURL: "https://issuer.example.com",
-		Secret:       "test-secret",
+		Secret:       []byte("test-secret"),
 	})
 	require.NoError(t, err)
 
@@ -70,7 +70,7 @@ func TestClientPreviewBuilderAcceptsUnknownScope(t *testing.T) {
 	provider, err := newProvider(NewStore(db), nil, testTokenSigner{key: signerKey}, Config{ //nolint:gosec // static test-only provider secret
 		BaseURL:      "https://issuer.example.com",
 		TokenBaseURL: "https://issuer.example.com",
-		Secret:       "test-secret",
+		Secret:       []byte("test-secret"),
 	})
 	require.NoError(t, err)
 
