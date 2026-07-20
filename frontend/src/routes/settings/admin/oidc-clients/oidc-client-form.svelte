@@ -45,6 +45,7 @@
 	const client = {
 		id: '',
 		name: existingClient?.name || '',
+		description: existingClient?.description || '',
 		callbackURLs: existingClient?.callbackURLs || [],
 		logoutCallbackURLs: existingClient?.logoutCallbackURLs || [],
 		isPublic: existingClient?.isPublic || false,
@@ -75,6 +76,7 @@
 				.optional()
 		),
 		name: z.string().min(2).max(50),
+		description: z.string().max(150),
 		callbackURLs: z.array(callbackUrlSchema).default([]),
 		logoutCallbackURLs: z.array(callbackUrlSchema).default([]),
 		isPublic: z.boolean(),
@@ -207,6 +209,12 @@
 			bind:input={$inputs.name}
 		/>
 		<FormInput
+			label={m.client_description()}
+			class="w-full"
+			description={m.client_description_description()}
+			bind:input={$inputs.description}
+		/>
+		<FormInput
 			label={m.client_launch_url()}
 			description={m.client_launch_url_description()}
 			class="w-full"
@@ -227,17 +235,19 @@
 			bind:callbackURLs={$inputs.logoutCallbackURLs.value}
 			bind:error={$inputs.logoutCallbackURLs.error}
 		/>
-		<SwitchWithLabel
-			id="public-client"
-			label={m.public_client()}
-			description={m.public_clients_description()}
-			onCheckedChange={(v) => {
-				if (v) {
-					$inputs.pkceEnabled.value = true;
-				}
-			}}
-			bind:checked={$inputs.isPublic.value}
-		/>
+		<div>
+			<SwitchWithLabel
+				id="public-client"
+				label={m.public_client()}
+				description={m.public_clients_description()}
+				onCheckedChange={(v) => {
+					if (v) {
+						$inputs.pkceEnabled.value = true;
+					}
+				}}
+				bind:checked={$inputs.isPublic.value}
+			/>
+		</div>
 		<div
 			class="rounded-lg transition-all duration-200"
 			class:[&_[data-switch-root]]:ring-2={pkcePromptNeeded}

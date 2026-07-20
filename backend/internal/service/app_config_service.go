@@ -10,13 +10,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hashicorp/go-uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
 	"github.com/pocket-id/pocket-id/backend/internal/common"
 	"github.com/pocket-id/pocket-id/backend/internal/dto"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
+	"github.com/pocket-id/pocket-id/backend/internal/tracing"
 	"github.com/pocket-id/pocket-id/backend/internal/utils"
 )
 
@@ -25,19 +25,18 @@ type AppConfigService struct {
 	db       *gorm.DB
 }
 
-func NewAppConfigService(ctx context.Context, db *gorm.DB) (*AppConfigService, error) {
-	service := &AppConfigService{
+func NewAppConfigService(ctx context.Context, db *gorm.DB) (service *AppConfigService, err error) {
+	service = &AppConfigService{
 		db: db,
 	}
 
-	err := service.LoadDbConfig(ctx)
+	ctx, span := tracing.Start(ctx, "pocketid.appconfig.init")
+	defer tracing.End(span, err)
+
+	// We need to assign to the "err" variable, do not inline this into the "if"
+	err = service.LoadDbConfig(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize app config service: %w", err)
-	}
-
-	err = service.initInstanceID(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize instance ID: %w", err)
 	}
 
 	return service, nil
@@ -69,8 +68,6 @@ func (s *AppConfigService) getDefaultDbConfig() *model.AppConfig {
 		SignupDefaultUserGroupIDs: model.AppConfigVariable{Value: "[]"},
 		SignupDefaultCustomClaims: model.AppConfigVariable{Value: "[]"},
 		AccentColor:               model.AppConfigVariable{Value: "default"},
-		// Internal
-		InstanceID: model.AppConfigVariable{Value: ""},
 		// Email
 		RequireUserEmail:              model.AppConfigVariable{Value: "true"},
 		SmtpHost:                      model.AppConfigVariable{},
@@ -168,9 +165,7 @@ func (s *AppConfigService) UpdateAppConfig(ctx context.Context, input dto.AppCon
 	if err != nil {
 		return nil, err
 	}
-	defer func() {
-		tx.Rollback()
-	}()
+	defer tx.Rollback()
 
 	// From here onwards, we know we are the only process/goroutine with exclusive access to the config
 	// Re-load the config from the database to be sure we have the correct data
@@ -248,9 +243,7 @@ func (s *AppConfigService) UpdateAppConfigValues(ctx context.Context, keysAndVal
 	if err != nil {
 		return err
 	}
-	defer func() {
-		tx.Rollback()
-	}()
+	defer tx.Rollback()
 
 	// From here onwards, we know we are the only process/goroutine with exclusive access to the config
 	// Re-load the config from the database to be sure we have the correct data
@@ -420,24 +413,4 @@ func (s *AppConfigService) loadDbConfigFromEnv(ctx context.Context, tx *gorm.DB)
 	}
 
 	return dest, nil
-}
-
-func (s *AppConfigService) initInstanceID(ctx context.Context) error {
-	// Check if the instance ID is already set
-	instanceID := s.GetDbConfig().InstanceID.Value
-	if instanceID != "" {
-		return nil
-	}
-
-	newInstanceID, err := uuid.GenerateUUID()
-	if err != nil {
-		return fmt.Errorf("failed to generate new instance ID: %w", err)
-	}
-
-	err = s.UpdateAppConfigValues(ctx, "instanceId", newInstanceID)
-	if err != nil {
-		return fmt.Errorf("failed to update instance ID in the database: %w", err)
-	}
-
-	return nil
 }

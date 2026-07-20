@@ -24,6 +24,7 @@ import (
 	"github.com/pocket-id/pocket-id/backend/internal/apikey"
 	"gorm.io/gorm"
 
+	"github.com/pocket-id/pocket-id/backend/internal/api"
 	"github.com/pocket-id/pocket-id/backend/internal/common"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
 	datatype "github.com/pocket-id/pocket-id/backend/internal/model/types"
@@ -186,6 +187,7 @@ func (s *TestService) SeedDatabase(baseURL string) error {
 					ID: "3654a746-35d4-4321-ac61-0bdcff2b4055",
 				},
 				Name:               "Nextcloud",
+				Description:        "This is an example description for Nextcloud",
 				LaunchURL:          new("https://nextcloud.local"),
 				Secret:             "$2a$10$9dypwot8nGuCjT6wQWWpJOckZfRprhe2EkwpKizxS/fpVHrOLEJHC", // w2mUeZISmEvIDMEDvpY0PnxQIpj1m3zY
 				CallbackURLs:       model.UrlList{"http://nextcloud.localhost/auth/callback"},
@@ -315,6 +317,62 @@ func (s *TestService) SeedDatabase(baseURL string) error {
 		}
 		for _, userAuthorizedClient := range userAuthorizedClients {
 			if err := tx.Create(&userAuthorizedClient).Error; err != nil {
+				return err
+			}
+		}
+
+		ordersAPI := api.API{
+			Base: model.Base{
+				ID: "f6a8b3c1-2d4e-4a6b-8c9d-0e1f2a3b4c5d",
+			},
+			Name:     "Orders API",
+			Audience: "https://api.orders.test",
+		}
+		if err := tx.Create(&ordersAPI).Error; err != nil {
+			return err
+		}
+
+		apiPermissions := []api.Permission{
+			{
+				Base: model.Base{
+					ID: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+				},
+				APIID:       ordersAPI.ID,
+				Key:         "read:orders",
+				Name:        "Read orders",
+				Description: new("Read order data"),
+			},
+			{
+				Base: model.Base{
+					ID: "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
+				},
+				APIID:       ordersAPI.ID,
+				Key:         "write:orders",
+				Name:        "Write orders",
+				Description: new("Create and modify orders"),
+			},
+		}
+		for _, permission := range apiPermissions {
+			if err := tx.Create(&permission).Error; err != nil {
+				return err
+			}
+		}
+
+		// Immich is allowed to request read:orders on behalf of users and to obtain write:orders for itself via the client credentials grant
+		allowedAPIPermissions := []api.OidcClientAllowedAPIPermission{
+			{
+				OidcClientID:    oidcClients[1].ID,
+				APIPermissionID: apiPermissions[0].ID,
+				SubjectType:     oidc.SubjectTypeUser,
+			},
+			{
+				OidcClientID:    oidcClients[1].ID,
+				APIPermissionID: apiPermissions[1].ID,
+				SubjectType:     oidc.SubjectTypeClient,
+			},
+		}
+		for _, allowed := range allowedAPIPermissions {
+			if err := tx.Create(&allowed).Error; err != nil {
 				return err
 			}
 		}
@@ -572,11 +630,21 @@ func (s *TestService) ResetAppConfig(ctx context.Context) error {
 		return err
 	}
 
-	// Manually set instance ID
-	err = s.appConfigService.UpdateAppConfigValues(ctx, "instanceId", "test-instance-id")
+	// Manually set the instance ID used to derive the JWK encryption key, so the seeded JWK can be decrypted
+	// Persist the fixed test value so it survives an export/import round-trip
+	const testInstanceID = "test-instance-id"
+	err = s.db.WithContext(ctx).
+		Exec(
+			`INSERT INTO kv (key, value) VALUES ('instance_id', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value`,
+			testInstanceID,
+		).
+		Error
 	if err != nil {
 		return err
 	}
+
+	// The instance ID is loaded once at startup, so we also set it directly on the JWT service so it takes effect immediately
+	s.jwtService.instanceID = testInstanceID
 
 	// Reload the app config from the database after resetting the values
 	err = s.appConfigService.LoadDbConfig(ctx)
@@ -776,7 +844,9 @@ type fositeTokenSession struct {
 func (s *TestService) seedFositeTokenSession(ctx context.Context, session fositeTokenSession) error {
 	request := s.newFositeTokenRequest(session)
 
-	store := oidc.NewStore(s.db)
+	store := oidc.
+		NewStore(s.db, nil).
+		WithIssuer(common.EnvConfig.AppURL)
 	switch session.Kind {
 	case "access_token":
 		return store.CreateAccessTokenSession(ctx, session.Signature, request)

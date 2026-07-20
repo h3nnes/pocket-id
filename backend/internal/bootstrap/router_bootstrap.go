@@ -26,6 +26,7 @@ import (
 	"github.com/pocket-id/pocket-id/backend/internal/common"
 	"github.com/pocket-id/pocket-id/backend/internal/controller"
 	"github.com/pocket-id/pocket-id/backend/internal/middleware"
+	"github.com/pocket-id/pocket-id/backend/internal/tracing"
 	"github.com/pocket-id/pocket-id/backend/internal/utils/systemd"
 )
 
@@ -67,7 +68,10 @@ func initEngine() (*gin.Engine, error) {
 
 	r := gin.New()
 	initLogger(r)
-	configureEngine(r)
+	err := configureEngine(r)
+	if err != nil {
+		return nil, err
+	}
 	registerGlobalMiddleware(r)
 
 	return r, nil
@@ -85,17 +89,36 @@ func setGinMode() {
 	}
 }
 
-func configureEngine(r *gin.Engine) {
-	if !common.EnvConfig.TrustProxy {
-		_ = r.SetTrustedProxies(nil)
+func configureEngine(r *gin.Engine) error {
+	err := r.SetTrustedProxies(common.EnvConfig.TrustProxy)
+	if err != nil {
+		return fmt.Errorf("failed to configure trusted proxies: %w", err)
 	}
 
 	if common.EnvConfig.TrustedPlatform != "" {
 		r.TrustedPlatform = common.EnvConfig.TrustedPlatform
 	}
 
-	if common.EnvConfig.TracingEnabled {
-		r.Use(otelgin.Middleware(common.Name))
+	r.Use(otelgin.Middleware(
+		common.Name,
+		otelgin.WithFilter(shouldTraceRequest)),
+	)
+
+	return nil
+}
+
+// shouldTraceRequest reports whether an incoming request should be traced.
+// It traces only requests handled by real backend routes (the API, the OIDC/OAuth endpoints, and the well-known documents).
+// Everything else falls through to the frontend NoRoute handler, which serves the SPA shell and static assets; tracing those would produce noisy, unparented spans named just "GET" with an empty http.route.
+func shouldTraceRequest(r *http.Request) bool {
+	p := r.URL.Path
+	switch {
+	case strings.HasPrefix(p, "/api/"),
+		strings.HasPrefix(p, "/.well-known/"),
+		p == "/authorize":
+		return true
+	default:
+		return false
 	}
 }
 
@@ -140,6 +163,7 @@ func registerRoutes(r *gin.Engine, db *gorm.DB, svc *services, rateLimitServices
 	controller.NewAppImagesController(apiGroup, authMiddleware, svc.appImagesService)
 	controller.NewAuditLogController(apiGroup, svc.auditLogService, authMiddleware)
 	controller.NewUserGroupController(apiGroup, authMiddleware, svc.userGroupService)
+	svc.apiModule.RegisterRoutes(apiGroup, authMiddleware.Add())
 	controller.NewCustomClaimController(apiGroup, authMiddleware, svc.customClaimService)
 	controller.NewVersionController(apiGroup, authMiddleware, svc.versionService)
 	controller.NewScimController(apiGroup, authMiddleware, svc.scimService)
@@ -158,6 +182,10 @@ func registerRoutes(r *gin.Engine, db *gorm.DB, svc *services, rateLimitServices
 
 	// These are not rate-limited.
 	controller.NewHealthzController(r)
+
+	// Receives OTLP trace payloads from the browser SPA (POST /internal/telemetry/traces) and forwards them to the collector, when trace export is enabled.
+	// Outside /api, so it's unauthenticated and not traced, but it is rate-limited.
+	tracing.NewTelemetryController(r, rateLimitMiddleware.Add(middleware.RateLimitInternal))
 
 	return nil
 }
@@ -194,7 +222,18 @@ func initServer(r *gin.Engine) (*serverConfig, error) {
 	}
 
 	addr := socket.addr
+
 	listener := socket.listener
+
+	// Wrap the listener with a proxy protocol listener if configured and not using a Unix socket
+	if len(common.EnvConfig.ProxyProtocol) > 0 && common.EnvConfig.UnixSocket == "" {
+		listener, err = newProxyProtocolListener(socket.listener, common.EnvConfig.ProxyProtocol)
+		if err != nil {
+			_ = socket.listener.Close()
+			return nil, err
+		}
+	}
+
 	server := newHTTPServer(r, protocols)
 
 	return &serverConfig{addr, certProvider, listener, server, tlsConfig}, nil

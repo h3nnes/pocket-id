@@ -282,6 +282,7 @@ func validateClaimRemappings(remappings []dto.OidcClientClaimRemappingDto) error
 func updateOIDCClientModelFromDto(client *model.OidcClient, input *dto.OidcClientUpdateDto) {
 	// Base fields
 	client.Name = input.Name
+	client.Description = input.Description
 	client.CallbackURLs = input.CallbackURLs
 	client.LogoutCallbackURLs = input.LogoutCallbackURLs
 	client.IsPublic = input.IsPublic
@@ -673,16 +674,16 @@ func (s *OidcService) ListAccessibleOidcClients(ctx context.Context, userID stri
 	// If user has no groups, only return clients with no allowed user groups
 	if len(userGroupIDs) == 0 {
 		query = query.Where(`NOT EXISTS (
-        SELECT 1 FROM oidc_clients_allowed_user_groups 
+        SELECT 1 FROM oidc_clients_allowed_user_groups
         WHERE oidc_clients_allowed_user_groups.oidc_client_id = oidc_clients.id)`)
 	} else {
 		query = query.Where(`
         NOT EXISTS (
-            SELECT 1 FROM oidc_clients_allowed_user_groups 
+            SELECT 1 FROM oidc_clients_allowed_user_groups
             WHERE oidc_clients_allowed_user_groups.oidc_client_id = oidc_clients.id
         ) OR EXISTS (
-            SELECT 1 FROM oidc_clients_allowed_user_groups 
-            WHERE oidc_clients_allowed_user_groups.oidc_client_id = oidc_clients.id 
+            SELECT 1 FROM oidc_clients_allowed_user_groups
+            WHERE oidc_clients_allowed_user_groups.oidc_client_id = oidc_clients.id
             AND oidc_clients_allowed_user_groups.user_group_id IN (?))`, userGroupIDs)
 	}
 
@@ -711,6 +712,7 @@ func (s *OidcService) ListAccessibleOidcClients(ctx context.Context, userID stri
 			OidcClientMetaDataDto: dto.OidcClientMetaDataDto{
 				ID:          client.ID,
 				Name:        client.Name,
+				Description: client.Description,
 				LaunchURL:   client.LaunchURL,
 				HasLogo:     client.HasLogo(),
 				HasDarkLogo: client.HasDarkLogo(),

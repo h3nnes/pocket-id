@@ -1,8 +1,9 @@
 package oidc
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/rsa"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,10 +14,10 @@ import (
 
 func TestClientPreviewBuilderUsesFositeTokenStrategies(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
-	signerKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	signerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
-	provider, err := newProvider(NewStore(db), nil, testTokenSigner{key: signerKey}, Config{ //nolint:gosec // static test-only provider secret
+	provider, err := newProvider(NewStore(db, nil), nil, testTokenSigner{key: signerKey}, Config{ //nolint:gosec // static test-only provider secret
 		BaseURL:      "https://issuer.example.com",
 		TokenBaseURL: "https://issuer.example.com",
 		Secret:       []byte("test-secret"),
@@ -45,7 +46,8 @@ func TestClientPreviewBuilderUsesFositeTokenStrategies(t *testing.T) {
 
 	require.Equal(t, "https://issuer.example.com", preview.AccessToken["iss"])
 	require.ElementsMatch(t, []string{"openid", "email"}, stringSliceClaim(t, preview.AccessToken["scp"]))
-	require.ElementsMatch(t, []string{clientID}, stringSliceClaim(t, preview.AccessToken["aud"]))
+	// The identity scopes add the issuer to the audience so the previewed token would also work at /userinfo
+	require.ElementsMatch(t, []string{clientID, "https://issuer.example.com"}, stringSliceClaim(t, preview.AccessToken["aud"]))
 	require.NotContains(t, preview.AccessToken, "type")
 
 	require.Equal(t, userID, preview.IDToken["sub"])
@@ -59,27 +61,31 @@ func TestClientPreviewBuilderUsesFositeTokenStrategies(t *testing.T) {
 }
 
 func TestClientPreviewBuilderAcceptsUnknownScope(t *testing.T) {
-	// Pocket ID accepts any scope (wildcard strategy) so third-party apps that request
-	// custom or application-specific scopes (e.g. mailcow) are not rejected with invalid_scope
+	// Pocket ID accepts any scope (wildcard strategy) so third-party apps that request custom or application-specific scopes (e.g. mailcow) are not rejected with invalid_scope
 	db := testutils.NewDatabaseForTest(t)
-	signerKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	signerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 
-	require.NoError(t, db.Create(&model.User{Base: model.Base{ID: "test-user"}, Username: "test"}).Error)
-
-	provider, err := newProvider(NewStore(db), nil, testTokenSigner{key: signerKey}, Config{ //nolint:gosec // static test-only provider secret
+	provider, err := newProvider(NewStore(db, nil), nil, testTokenSigner{key: signerKey}, Config{ //nolint:gosec // static test-only provider secret
 		BaseURL:      "https://issuer.example.com",
 		TokenBaseURL: "https://issuer.example.com",
 		Secret:       []byte("test-secret"),
 	})
 	require.NoError(t, err)
 
+	require.NoError(t, db.Create(&model.User{
+		Base:     model.Base{ID: "test-user"},
+		Username: "test-user",
+	}).Error)
+
+	// The preview mirrors the authorize endpoint: unknown scopes are accepted and passed through without error
 	builder := newClientPreviewBuilder(newClaimsService(db, nil, "https://issuer.example.com", nil), provider.tokenStrategies)
-	_, err = builder.BuildClientPreview(t.Context(), model.OidcClient{
+	preview, err := builder.BuildClientPreview(t.Context(), model.OidcClient{
 		Base: model.Base{ID: "test-client"},
 		Name: "Test Client",
 	}, "test-user", []string{"openid", "unknown"}, "")
 	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"openid", "unknown"}, stringSliceClaim(t, preview.AccessToken["scp"]))
 }
 
 func stringSliceClaim(t *testing.T, value any) []string {
