@@ -30,10 +30,10 @@ func TestMigrateDatabaseAcceptsOldRenamedPKCEVersion(t *testing.T) {
 	defer sqlDb.Close()
 
 	// Simulate a database that recorded the previous PKCE migration timestamp
-	if _, err := sqlDb.Exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER, dirty INTEGER)"); err != nil {
+	if _, err := sqlDb.ExecContext(t.Context(), "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER, dirty INTEGER)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := sqlDb.Exec("INSERT INTO schema_migrations (version, dirty) VALUES (20260726153900, 0)"); err != nil {
+	if _, err := sqlDb.ExecContext(t.Context(), "INSERT INTO schema_migrations (version, dirty) VALUES (20260726153900, 0)"); err != nil {
 		t.Fatal(err)
 	}
 
