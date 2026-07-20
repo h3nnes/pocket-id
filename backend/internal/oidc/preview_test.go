@@ -60,8 +60,7 @@ func TestClientPreviewBuilderUsesFositeTokenStrategies(t *testing.T) {
 	require.Equal(t, true, preview.UserInfo["email_verified"])
 }
 
-func TestClientPreviewBuilderAcceptsUnknownScope(t *testing.T) {
-	// Pocket ID accepts any scope (wildcard strategy) so third-party apps that request custom or application-specific scopes (e.g. mailcow) are not rejected with invalid_scope
+func TestClientPreviewBuilderIgnoresUnknownScopes(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 	signerKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
@@ -78,14 +77,15 @@ func TestClientPreviewBuilderAcceptsUnknownScope(t *testing.T) {
 		Username: "test-user",
 	}).Error)
 
-	// The preview mirrors the authorize endpoint: unknown scopes are accepted and passed through without error
+	// The preview mirrors the authorize endpoint: unknown scopes are dropped
+	// from the previewed tokens instead of failing the preview.
 	builder := newClientPreviewBuilder(newClaimsService(db, nil, "https://issuer.example.com", nil), provider.tokenStrategies)
 	preview, err := builder.BuildClientPreview(t.Context(), model.OidcClient{
 		Base: model.Base{ID: "test-client"},
 		Name: "Test Client",
 	}, "test-user", []string{"openid", "unknown"}, "")
 	require.NoError(t, err)
-	require.ElementsMatch(t, []string{"openid", "unknown"}, stringSliceClaim(t, preview.AccessToken["scp"]))
+	require.ElementsMatch(t, []string{"openid"}, stringSliceClaim(t, preview.AccessToken["scp"]))
 }
 
 func stringSliceClaim(t *testing.T, value any) []string {

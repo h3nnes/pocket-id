@@ -41,11 +41,12 @@ func (c Client) GetResponseTypes() fosite.Arguments {
 }
 
 func (c Client) GetScopes() fosite.Arguments {
-	// Return a wildcard so any scope is accepted; Pocket ID does not restrict which scopes clients may request
-	// The standard scopes (openid, profile, email, groups) map to built-in claims and anything else passes through without error so third-party apps that request custom or application-specific scopes (e.g. mailcow) are not rejected
-	// API scopes are appended for callers that enumerate the client's scopes, but the wildcard already matches any requested scope
-	scopes := make(fosite.Arguments, 1, 1+len(c.apiScopes))
-	scopes[0] = "*"
+	scopes := make(fosite.Arguments, 5, 5+len(c.apiScopes))
+	scopes[0] = "openid"
+	scopes[1] = "profile"
+	scopes[2] = "email"
+	scopes[3] = "groups"
+	scopes[4] = "offline_access"
 	scopes = append(scopes, c.apiScopes...)
 	return scopes
 }

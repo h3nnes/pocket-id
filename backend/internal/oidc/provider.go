@@ -45,9 +45,8 @@ func newProvider(store *Store, authenticator *federatedClientAuthenticator, sign
 		IDTokenIssuer:                           config.BaseURL,
 		AccessTokenIssuer:                       config.BaseURL,
 		TokenURL:                                config.TokenBaseURL + "/api/oidc/token",
-		// Use a wildcard scope strategy so any scope requested by a client is accepted
-		// This keeps third-party apps (e.g. mailcow) that request custom scopes from being rejected with invalid_scope
-		ScopeStrategy:                           fosite.WildcardScopeStrategy,
+		ScopeStrategy:                           fosite.ExactScopeStrategy,
+		IgnoreUnknownScopes:                     true,
 		AudienceMatchingStrategy:                fosite.ExactAudienceMatchingStrategy,
 		RedirectURIMatcher:                      matchRedirectURI,
 		RedirectSecureChecker:                   redirectSecureChecker(config.AllowInsecureCallbackURLs),
