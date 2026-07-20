@@ -1,0 +1,1 @@
+-- no-op migration: compatibility placeholder for databases that recorded the old PKCE migration timestamp before it was renamed
