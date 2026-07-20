@@ -1,0 +1,1 @@
+-- no-op: these tables may have been created by an earlier migration, so we cannot safely drop them here

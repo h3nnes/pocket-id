@@ -40,4 +40,17 @@ func TestMigrateDatabaseAcceptsOldRenamedPKCEVersion(t *testing.T) {
 	if err := MigrateDatabase(context.Background(), sqlDb); err != nil {
 		t.Fatal(err)
 	}
+
+	// Databases that recorded the old PKCE timestamp may have skipped the oauth_apis migration
+	// Make sure the missing tables are created by the compatibility migration
+	for _, table := range []string{"apis", "api_permissions", "oidc_clients_allowed_api_permissions"} {
+		var name string
+		err := sqlDb.QueryRowContext(t.Context(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&name)
+		if err != nil {
+			t.Fatalf("expected table %s to exist: %v", table, err)
+		}
+		if name != table {
+			t.Fatalf("expected table %s, got %s", table, name)
+		}
+	}
 }
