@@ -188,6 +188,29 @@ func TestJwtService_Init(t *testing.T) {
 			assert.Equal(t, origKeyID, loadedKeyID, "Loaded key should have the same ID as the original")
 	})
 
+	t.Run("should regenerate key when existing key cannot be decrypted", func(t *testing.T) {
+		db := testutils.NewDatabaseForTest(t)
+		mockEnvConfig := newTestEnvConfig()
+		instanceID := newInstanceID(t, db)
+
+		// Save a key encrypted with the original encryption key
+		origKeyID := createECDSAKeyJWK(t, db, instanceID, mockEnvConfig, mockConfig)
+
+		// Create a service with a different encryption key so the stored key is unrecoverable
+		differentEnvConfig := newTestEnvConfig()
+		differentEnvConfig.EncryptionKey = []byte("a-different-32-byte-encryption-key")
+
+		svc := &JwtService{}
+		err := svc.init(t.Context(), db, instanceID, differentEnvConfig)
+		require.NoError(t, err, "JWT service should start even when the existing key cannot be decrypted")
+		require.NotNil(t, svc.privateKey, "A new private key should have been generated")
+
+		// The new key must have a different ID than the original
+		loadedKeyID, ok := svc.privateKey.KeyID()
+		require.True(t, ok)
+		assert.NotEqual(t, origKeyID, loadedKeyID, "A regenerated key should have a different key ID")
+	})
+
 }
 
 func TestJwtService_GetPublicJWK(t *testing.T) {
