@@ -20,7 +20,7 @@ jobs:
       matrix:
         include:
           - name: Linux
-            runner: depot-ubuntu-latest
+            runner: ubuntu-latest
           - name: Windows
             runner: windows-latest
     runs-on: ${{ matrix.runner }}
@@ -40,7 +40,7 @@ jobs:
 
   test-backend-race:
     name: Backend (race detector)
-    runs-on: depot-ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
