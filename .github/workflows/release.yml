@@ -13,6 +13,9 @@ permissions:
 
 jobs:
   release:
+    # Disabled on this fork: upstream config uses GoReleaser Pro (paid) and publishes to pocket-id/pocket-id.
+    # Re-enable by setting this to a real condition once you have a GORELEASER_KEY or migrate the config off Pro.
+    if: false
     runs-on: ubuntu-latest
 
     steps:

@@ -13,8 +13,6 @@ concurrency:
 permissions:
   contents: read
   packages: write
-  attestations: write
-  artifact-metadata: write
 
 jobs:
   build-next:
@@ -23,25 +21,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-        with:
-          run_install: false
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.5.0
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -53,30 +32,19 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7.2.3
+      - name: Build and push next image
+        uses: docker/build-push-action@v6
         with:
-          distribution: goreleaser-pro
-          version: "~> v2"
-          args: release --clean --skip=announce,validate --parallelism=4
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BUILD_NEXT: "true"
-          SKIP_RELEASE: "true"
-          SKIP_CHANGELOG: "true"
-          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
-          MACOS_SIGN_P12: ${{ secrets.MACOS_SIGN_P12 }}
-          MACOS_SIGN_PASSWORD: ${{ secrets.MACOS_SIGN_PASSWORD }}
-          MACOS_NOTARY_KEY: ${{ secrets.MACOS_NOTARY_KEY }}
-          MACOS_NOTARY_KEY_ID: ${{ secrets.MACOS_NOTARY_KEY_ID }}
-          MACOS_NOTARY_ISSUER_ID: ${{ secrets.MACOS_NOTARY_ISSUER_ID }}
-
-      - name: Binary attestation
-        uses: actions/attest@v4.2.0
-        with:
-          subject-checksums: ./dist/checksums.txt
-
-      - name: Container image attestation
-        uses: actions/attest@v4.2.0
-        with:
-          subject-checksums: ./dist/digests.txt
+          context: .
+          file: docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/pocket-id:next
+            ghcr.io/${{ github.repository_owner }}/pocket-id:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.title=Pocket ID
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
