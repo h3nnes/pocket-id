@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/pocket-id/pocket-id/backend/internal/common"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
+	cryptoutils "github.com/pocket-id/pocket-id/backend/internal/utils/crypto"
 	jwkutils "github.com/pocket-id/pocket-id/backend/internal/utils/jwk"
 )
 
@@ -81,7 +83,15 @@ func (s *JwtService) LoadOrGenerateKey(ctx context.Context) error {
 	// Try loading a key
 	key, err := keyProvider.LoadKey(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to load key: %w", err)
+		// If the existing key cannot be decrypted, it is unrecoverable
+		// Continuing to crash here traps users whose instance ID or encryption key changed
+		// We generate a fresh key instead, which invalidates existing sessions and tokens
+		if errors.Is(err, cryptoutils.ErrDecrypt) {
+			slog.ErrorContext(ctx, "Failed to decrypt existing JWT private key; generating a new one. Existing sessions and tokens will be invalidated.", slog.Any("error", err))
+			key = nil
+		} else {
+			return fmt.Errorf("failed to load key: %w", err)
+		}
 	}
 
 	// If we have a key, store it in the object and we're done
