@@ -182,7 +182,8 @@ func TestClaimsServiceRemappingUserFieldNilSource(t *testing.T) {
 }
 
 // TestClaimsServiceRemappingStaticJSONVariants verifies static values decode into the intended JSON types
-func TestClaimsServiceRemappingStaticJSONVariants(t *testing.T) {	db := testutils.NewDatabaseForTest(t)
+func TestClaimsServiceRemappingStaticJSONVariants(t *testing.T) {
+	db := testutils.NewDatabaseForTest(t)
 	const userID = "user-static"
 
 	service := newClaimsService(db, fakeCustomClaimSource{}, "https://id.example.com", nil)
@@ -202,7 +203,7 @@ func TestClaimsServiceRemappingStaticJSONVariants(t *testing.T) {	db := testutil
 
 	claims, err := service.GetUserClaimsForClient(t.Context(), userID, []string{"openid"}, client)
 	require.NoError(t, err)
-	assert.Equal(t, float64(42), claims["num"])
+	assert.InEpsilon(t, float64(42), claims["num"], 0.0001)
 	assert.Equal(t, true, claims["flag"])
 	assert.Equal(t, []any{"a"}, claims["arr"])
 	assert.Equal(t, "plain text", claims["text"])

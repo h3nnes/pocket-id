@@ -190,6 +190,8 @@ func (s *ClaimsService) GetUserClaimsForClient(ctx context.Context, userID strin
 			needsUser = true
 		case model.RemappingSourceCustomClaim:
 			needsCustomClaims = true
+		case model.RemappingSourceStatic:
+			// Static values need neither the user record nor the custom-claim map
 		}
 	}
 
