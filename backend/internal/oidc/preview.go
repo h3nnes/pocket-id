@@ -37,7 +37,7 @@ func (b *ClientPreviewBuilder) BuildClientPreview(ctx context.Context, client mo
 		return nil, err
 	}
 
-	userInfo, err := b.claimsService.GetUserClaims(ctx, userID, scopeArgs)
+	userInfo, err := b.claimsService.GetUserClaimsForClient(ctx, userID, scopeArgs, &client)
 	if err != nil {
 		return nil, err
 	}

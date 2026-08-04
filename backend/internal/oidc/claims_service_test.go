@@ -166,7 +166,7 @@ func TestClaimsServiceAppliesSigningAlgToIDTokenHeader(t *testing.T) {
 			session := NewEmptySession()
 			session.Subject = "alg-user"
 
-			require.NoError(t, service.applyIDTokenClaims(t.Context(), session, fosite.Arguments{"openid"}))
+			require.NoError(t, service.applyIDTokenClaims(t.Context(), session, fosite.Arguments{"openid"}, nil))
 			require.Equal(t, alg.String(), session.IDTokenHeaders().Get("alg"))
 		})
 	}

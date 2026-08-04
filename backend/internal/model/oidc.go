@@ -88,6 +88,7 @@ func (c OidcClient) IsMetadataDocument() bool {
 
 type OidcClientCredentials struct { //nolint:recvcheck
 	FederatedIdentities []OidcClientFederatedIdentity `json:"federatedIdentities,omitempty"`
+	ClaimRemappings     []OidcClientClaimRemapping    `json:"claimRemappings,omitempty"`
 }
 
 type OidcClientFederatedIdentity struct {
@@ -96,6 +97,26 @@ type OidcClientFederatedIdentity struct {
 	Audience         string `json:"audience,omitempty"`
 	JWKS             string `json:"jwks,omitempty"` // URL of the JWKS
 	ReplayProtection bool   `json:"replayProtection,omitempty"`
+}
+
+// ClaimRemappingSourceType identifies where the remapped claim value is sourced from
+type ClaimRemappingSourceType string
+
+const (
+	// RemappingSourceUserField sources the value from a fixed allowlist of user-profile fields
+	RemappingSourceUserField ClaimRemappingSourceType = "user_field"
+	// RemappingSourceCustomClaim sources the value from an existing custom-claim key on the user
+	RemappingSourceCustomClaim ClaimRemappingSourceType = "custom_claim"
+	// RemappingSourceStatic uses a literal admin-configured value, optionally parsed as JSON
+	RemappingSourceStatic ClaimRemappingSourceType = "static"
+)
+
+// OidcClientClaimRemapping defines a per-client override for a single OIDC claim
+// Admins configure these to override or add claims in ID tokens and userinfo responses for a specific client
+type OidcClientClaimRemapping struct {
+	ClaimName   string                   `json:"claimName"`
+	SourceType  ClaimRemappingSourceType `json:"sourceType"`
+	SourceValue string                   `json:"sourceValue"`
 }
 
 func (occ OidcClientCredentials) FederatedIdentityForIssuer(issuer string) (OidcClientFederatedIdentity, bool) {

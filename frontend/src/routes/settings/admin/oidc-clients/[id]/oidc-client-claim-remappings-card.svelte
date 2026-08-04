@@ -7,7 +7,7 @@
 	import { createForm } from '$lib/utils/form-util';
 	import { slide } from 'svelte/transition';
 	import { z } from 'zod/v4';
-	import FederatedIdentitiesInput from '../federated-identities-input.svelte';
+	import ClaimRemappingsInput from '../claim-remappings-input.svelte';
 
 	let {
 		client,
@@ -18,50 +18,43 @@
 	} = $props();
 
 	let isLoading = $state(false);
+	// CIMD clients have their credentials managed externally, so no editing is offered here
 	const isCIMDClient = $derived(client.clientType === 'cimd');
 
 	const formSchema = z.object({
 		credentials: z.object({
-			federatedIdentities: z.array(
-				z.object({
-					issuer: z.url(),
-					subject: z.string().optional(),
-					audience: z.string().optional(),
-					jwks: z.url().optional().or(z.literal('')),
-					replayProtection: z.boolean().default(true)
-				})
-			)
+			claimRemappings: z
+				.array(
+					z.object({
+						claimName: z.string().min(1).max(255),
+						sourceType: z.enum(['user_field', 'custom_claim', 'static']),
+						sourceValue: z.string().min(1).max(1000)
+					})
+				)
+				.default([])
 		})
 	});
+
 	const { inputs, errors, ...form } = createForm(formSchema, {
 		credentials: {
-			federatedIdentities:
-				client.credentials?.federatedIdentities?.map((identity) => ({ ...identity })) ?? []
+			claimRemappings: client.credentials?.claimRemappings?.map((remap) => ({ ...remap })) ?? []
 		}
 	});
 
-	const hasFederatedIdentities = $derived($inputs.credentials.value.federatedIdentities.length > 0);
+	const hasRemappings = $derived($inputs.credentials.value.claimRemappings.length > 0);
 
-	function getFederatedIdentityErrors(errors: z.ZodError<any> | undefined) {
-		return errors?.issues
+	function getRemappingErrors(errs: z.ZodError<any> | undefined) {
+		return errs?.issues
 			.filter((error) =>
-				['credentials', 'federatedIdentities'].every(
-					(segment, index) => error.path[index] === segment
-				)
+				['credentials', 'claimRemappings'].every((segment, index) => error.path[index] === segment)
 			)
 			.map((error) => ({ ...error, path: error.path.slice(2) }));
 	}
 
-	function addFederatedIdentity() {
-		$inputs.credentials.value.federatedIdentities = [
-			...$inputs.credentials.value.federatedIdentities,
-			{
-				issuer: '',
-				subject: '',
-				audience: '',
-				jwks: '',
-				replayProtection: true
-			}
+	function addRemapping() {
+		$inputs.credentials.value.claimRemappings = [
+			...$inputs.credentials.value.claimRemappings,
+			{ claimName: '', sourceType: 'user_field', sourceValue: '' }
 		];
 	}
 
@@ -75,49 +68,39 @@
 		// Preserve credential sub-objects owned by other cards so submitting this card does not wipe them
 		const merged: OidcClientCredentials = {
 			...(client.credentials ?? { federatedIdentities: [] }),
-			federatedIdentities: data.credentials.federatedIdentities
+			claimRemappings: data.credentials.claimRemappings
 		};
 		await callback(merged).finally(() => (isLoading = false));
 	}
 </script>
 
 <form novalidate onsubmit={preventDefault(onSubmit)}>
-	<Card.Root data-testid="federated-credentials-card">
+	<Card.Root data-testid="claim-remappings-card">
 		<Card.Header>
 			<div class="flex items-center justify-between gap-4">
 				<div>
-					<Card.Title>{m.federated_client_credentials()}</Card.Title>
+					<Card.Title>{m.claim_remappings()}</Card.Title>
 					<Card.Description>
-						{m.federated_client_credentials_description()}
-						<a
-							class="underline underline-offset-4"
-							href="https://pocket-id.org/docs/guides/oidc-client-authentication"
-							target="_blank"
-							rel="noreferrer"
-						>
-							{m.docs()}
-						</a>
+						{m.claim_remappings_description()}
 					</Card.Description>
 				</div>
-				{#if !hasFederatedIdentities}
-					<Button disabled={isCIMDClient} onclick={addFederatedIdentity}>
-						{m.create()}
-					</Button>
+				{#if !hasRemappings}
+					<Button disabled={isCIMDClient} onclick={addRemapping}>{m.create()}</Button>
 				{/if}
 			</div>
 		</Card.Header>
-		{#if hasFederatedIdentities}
+		{#if hasRemappings}
 			<div transition:slide>
 				<Card.Content>
-					<FederatedIdentitiesInput
-						bind:federatedIdentities={$inputs.credentials.value.federatedIdentities}
-						errors={getFederatedIdentityErrors($errors)}
+					<ClaimRemappingsInput
+						bind:claimRemappings={$inputs.credentials.value.claimRemappings}
+						errors={getRemappingErrors($errors)}
 						disabled={isCIMDClient}
 					/>
 				</Card.Content>
 			</div>
 		{/if}
-		{#if !isCIMDClient && hasFederatedIdentities}
+		{#if !isCIMDClient && hasRemappings}
 			<Card.Footer class="justify-end">
 				<Button type="submit" disabled={isLoading}>{m.save()}</Button>
 			</Card.Footer>

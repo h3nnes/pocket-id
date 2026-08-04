@@ -144,6 +144,11 @@ func (s *OidcService) ListClients(ctx context.Context, name string, listRequestO
 }
 
 func (s *OidcService) CreateClient(ctx context.Context, input dto.OidcClientCreateDto, userID string) (model.OidcClient, error) {
+	// Semantic validation for claim remappings runs before any DB write so bad input never persists
+	if err := validateClaimRemappings(input.Credentials.ClaimRemappings); err != nil {
+		return model.OidcClient{}, err
+	}
+
 	client := model.OidcClient{
 		Base: model.Base{
 			ID: input.ID,
@@ -184,6 +189,11 @@ func (s *OidcService) CreateClient(ctx context.Context, input dto.OidcClientCrea
 }
 
 func (s *OidcService) UpdateClient(ctx context.Context, clientID string, input dto.OidcClientUpdateDto) (model.OidcClient, error) {
+	// Semantic validation for claim remappings runs before any DB write so bad input never persists
+	if err := validateClaimRemappings(input.Credentials.ClaimRemappings); err != nil {
+		return model.OidcClient{}, err
+	}
+
 	tx := s.db.Begin()
 	defer func() {
 		tx.Rollback()
@@ -192,6 +202,12 @@ func (s *OidcService) UpdateClient(ctx context.Context, clientID string, input d
 	client, err := s.getClientInternal(ctx, clientID, tx, true)
 	if err != nil {
 		return model.OidcClient{}, err
+	}
+
+	// CIMD clients skip Credentials on Save, so silently accepting a non-empty remapping list would be misleading
+	// Reject the request so an admin gets a clear error instead of a 200 followed by no persistence
+	if client.IsMetadataDocument() && len(input.Credentials.ClaimRemappings) > 0 {
+		return model.OidcClient{}, fmt.Errorf("claim remappings cannot be configured for clients backed by a metadata document")
 	}
 
 	updateOIDCClientModelFromDto(&client, &input)
@@ -286,6 +302,17 @@ func updateOIDCClientModelFromDto(client *model.OidcClient, input *dto.OidcClien
 			Subject:          fi.Subject,
 			JWKS:             fi.JWKS,
 			ReplayProtection: fi.ReplayProtection,
+		}
+	}
+
+	// Replace the claim remappings with the submitted configuration
+	// Values are trimmed and normalized here so the persisted form is canonical
+	client.Credentials.ClaimRemappings = make([]model.OidcClientClaimRemapping, len(input.Credentials.ClaimRemappings))
+	for i, cr := range input.Credentials.ClaimRemappings {
+		client.Credentials.ClaimRemappings[i] = model.OidcClientClaimRemapping{
+			ClaimName:   strings.TrimSpace(cr.ClaimName),
+			SourceType:  model.ClaimRemappingSourceType(cr.SourceType),
+			SourceValue: strings.TrimSpace(cr.SourceValue),
 		}
 	}
 

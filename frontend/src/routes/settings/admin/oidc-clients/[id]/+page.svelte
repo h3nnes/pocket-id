@@ -33,6 +33,7 @@
 	import OidcForm from '../oidc-client-form.svelte';
 	import OidcClientPreviewModal from '../oidc-client-preview-modal.svelte';
 	import ApiAccessCard from './api-access-card.svelte';
+	import OidcClientClaimRemappingsCard from './oidc-client-claim-remappings-card.svelte';
 	import OidcClientFederatedCredentialsCard from './oidc-client-federated-credentials-card.svelte';
 	import OidcClientTokenLifetimesCard from './oidc-client-token-lifetimes-card.svelte';
 	import ScimResourceProviderForm from './scim-resource-provider-form.svelte';
@@ -126,6 +127,16 @@
 	}
 
 	async function updateFederatedCredentials(credentials: OidcClientCredentials) {
+		const success = await updateClient({ ...client, credentials });
+		if (success) {
+			client.credentials = credentials;
+		}
+		return success;
+	}
+
+	// updateClaimRemappings reuses the same PUT /oidc/clients/:id endpoint and mirrors the federated-credentials flow
+	// The submitted credentials object is expected to already carry any other credential sub-objects merged in by the card
+	async function updateClaimRemappings(credentials: OidcClientCredentials) {
 		const success = await updateClient({ ...client, credentials });
 		if (success) {
 			client.credentials = credentials;
@@ -361,6 +372,8 @@
 		<OidcClientTokenLifetimesCard {client} callback={updateTokenLifetimes} />
 
 		<OidcClientFederatedCredentialsCard {client} callback={updateFederatedCredentials} />
+
+		<OidcClientClaimRemappingsCard {client} callback={updateClaimRemappings} />
 	</Tabs.Content>
 
 	<Tabs.Content value="user-groups" id="allowed-user-groups">

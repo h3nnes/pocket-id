@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ory/fosite"
+	"github.com/pocket-id/pocket-id/backend/internal/model"
 	"gorm.io/gorm"
 )
 
@@ -65,7 +66,13 @@ func (h *userInfoHandler) userInfo(c *gin.Context) {
 		return
 	}
 
-	claims, err := h.claimsService.GetUserClaims(ctx, session.GetSubject(), accessRequest.GetGrantedScopes())
+	// Thread the OIDC client through so admin-configured per-client remappings also apply to userinfo responses
+	// A non-Client value leaves clientPtr nil so remapping is skipped and existing behavior is preserved
+	var clientPtr *model.OidcClient
+	if client, ok := accessRequest.GetClient().(Client); ok {
+		clientPtr = &client.OidcClient
+	}
+	claims, err := h.claimsService.GetUserClaimsForClient(ctx, session.GetSubject(), accessRequest.GetGrantedScopes(), clientPtr)
 	if err != nil {
 		// A token whose subject no longer resolves to a user is an authentication failure, not a missing resource
 		if errors.Is(err, gorm.ErrRecordNotFound) {

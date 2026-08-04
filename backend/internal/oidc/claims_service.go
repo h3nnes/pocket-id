@@ -65,13 +65,14 @@ func (s *ClaimsService) ValidateUserAccess(ctx context.Context, userID string, c
 }
 
 // applyIDTokenClaims applies the claims of a user to the ID token claims in the session based on the requested scopes.
-func (s *ClaimsService) applyIDTokenClaims(ctx context.Context, session *Session, scopes fosite.Arguments) error {
+// The client is optional; when supplied it enables per-client claim remappings configured by an admin.
+func (s *ClaimsService) applyIDTokenClaims(ctx context.Context, session *Session, scopes fosite.Arguments, client *model.OidcClient) error {
 	userID := session.Subject
 	if userID == "" {
 		return nil
 	}
 
-	claims, err := s.GetUserClaims(ctx, userID, scopes)
+	claims, err := s.GetUserClaimsForClient(ctx, userID, scopes, client)
 	if err != nil {
 		return err
 	}
@@ -163,4 +164,145 @@ func (s *ClaimsService) GetUserClaims(ctx context.Context, userID string, scopes
 	}
 
 	return claims, nil
+}
+
+// GetUserClaimsForClient returns the standard claims for a user and then applies any per-client remappings configured on the client.
+// A nil client is a no-op wrapper around GetUserClaims and preserves existing behavior for callers that have no client in hand.
+func (s *ClaimsService) GetUserClaimsForClient(ctx context.Context, userID string, scopes []string, client *model.OidcClient) (map[string]any, error) {
+	// Fetch the standard claims first so remapping is a strict post-processing step
+	claims, err := s.GetUserClaims(ctx, userID, scopes)
+	if err != nil {
+		return nil, err
+	}
+
+	// Skip remapping when the caller has no client context or the client has no remappings configured
+	if client == nil || len(client.Credentials.ClaimRemappings) == 0 {
+		return claims, nil
+	}
+
+	// Only touch the database for source types that actually require it
+	// A remapping set consisting entirely of static values needs neither the user record nor the custom-claim map
+	needsUser := false
+	needsCustomClaims := false
+	for _, r := range client.Credentials.ClaimRemappings {
+		switch r.SourceType {
+		case model.RemappingSourceUserField:
+			needsUser = true
+		case model.RemappingSourceCustomClaim:
+			needsCustomClaims = true
+		}
+	}
+
+	db := dbFromContext(ctx, s.db)
+
+	// Load the user record only when a user_field remapping actually needs it
+	// The reload is intentional so remapping still works when GetUserClaims took the fast path without a load
+	var user model.User
+	if needsUser {
+		if err := db.First(&user, "id = ?", userID).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	// Load custom claims only when a custom_claim remapping actually needs them
+	// The map is populated once so per-entry lookups stay O(1)
+	var customClaimsMap map[string]any
+	if needsCustomClaims && s.customClaims != nil {
+		customClaims, err := s.customClaims.GetCustomClaimsForUserWithUserGroups(ctx, userID, db)
+		if err != nil {
+			return nil, err
+		}
+		customClaimsMap = make(map[string]any, len(customClaims))
+		for _, cc := range customClaims {
+			var jsonValue any
+			if err := json.Unmarshal([]byte(cc.Value), &jsonValue); err == nil {
+				customClaimsMap[cc.Key] = jsonValue
+			} else {
+				customClaimsMap[cc.Key] = cc.Value
+			}
+		}
+	}
+
+	applyClaimRemappings(claims, client.Credentials.ClaimRemappings, &user, customClaimsMap)
+	return claims, nil
+}
+
+// remappingReservedClaims is a defense-in-depth guard applied at token-issuance time
+// A legacy row that somehow bypassed validation (hand-edited SQL, an older buggy build, an offline migration) must never override claims that carry token semantics
+var remappingReservedClaims = map[string]bool{
+	"sub": true, "iss": true, "aud": true, "exp": true, "iat": true,
+	"auth_time": true, "nonce": true, "acr": true, "amr": true, "azp": true,
+	"nbf": true, "jti": true, "sid": true,
+	"at_hash": true, "c_hash": true, "s_hash": true,
+	"typ": true, "client_id": true, "cnf": true, "act": true,
+}
+
+// applyClaimRemappings overrides or adds claims in place based on the client's admin-configured remappings.
+// Remappings whose source cannot be resolved leave the existing claim untouched; this preserves the original value as a safe fallback.
+func applyClaimRemappings(
+	claims map[string]any,
+	remappings []model.OidcClientClaimRemapping,
+	user *model.User,
+	customClaimsMap map[string]any,
+) {
+	for _, remapping := range remappings {
+		// Skip reserved claims defensively even if a legacy row somehow slipped past validation
+		if remappingReservedClaims[remapping.ClaimName] {
+			continue
+		}
+
+		var remappedValue any
+		var foundValue bool
+
+		switch remapping.SourceType {
+		case model.RemappingSourceUserField:
+			// User-field lookup is a fixed switch so the allowlist is enforced structurally
+			switch remapping.SourceValue {
+			case "email":
+				if user.Email != nil && *user.Email != "" {
+					remappedValue = *user.Email
+					foundValue = true
+				}
+			case "first_name":
+				remappedValue = user.FirstName
+				foundValue = true
+			case "last_name":
+				remappedValue = user.LastName
+				foundValue = true
+			case "display_name":
+				remappedValue = user.DisplayName
+				foundValue = true
+			case "username":
+				remappedValue = user.Username
+				foundValue = true
+			case "locale":
+				if user.Locale != nil && *user.Locale != "" {
+					remappedValue = *user.Locale
+					foundValue = true
+				}
+			}
+
+		case model.RemappingSourceCustomClaim:
+			// Custom-claim lookup returns whatever type was stored (string, number, array, object)
+			if v, ok := customClaimsMap[remapping.SourceValue]; ok {
+				remappedValue = v
+				foundValue = true
+			}
+
+		case model.RemappingSourceStatic:
+			// Static values are first tried as JSON so arrays and booleans work; a parse failure falls back to the literal string
+			var jsonValue any
+			if err := json.Unmarshal([]byte(remapping.SourceValue), &jsonValue); err == nil {
+				remappedValue = jsonValue
+			} else {
+				remappedValue = remapping.SourceValue
+			}
+			foundValue = true
+		}
+
+		// Apply the remapped value only if the source resolved; otherwise the original claim is preserved
+		if foundValue {
+			claims[remapping.ClaimName] = remappedValue
+		}
+	}
 }

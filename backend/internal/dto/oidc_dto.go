@@ -70,6 +70,7 @@ type OidcClientSecretDto struct {
 
 type OidcClientCredentialsDto struct {
 	FederatedIdentities []OidcClientFederatedIdentityDto `json:"federatedIdentities,omitempty"`
+	ClaimRemappings     []OidcClientClaimRemappingDto    `json:"claimRemappings,omitempty"`
 }
 
 type OidcClientFederatedIdentityDto struct {
@@ -78,6 +79,14 @@ type OidcClientFederatedIdentityDto struct {
 	Audience         string `json:"audience,omitempty"`
 	JWKS             string `json:"jwks,omitempty"`
 	ReplayProtection bool   `json:"replayProtection"`
+}
+
+// OidcClientClaimRemappingDto is the wire representation of a single per-client claim override
+// The struct-tag limits are first-line defense; deeper semantic validation runs in the service layer
+type OidcClientClaimRemappingDto struct {
+	ClaimName   string `json:"claimName" binding:"required,min=1,max=255"`
+	SourceType  string `json:"sourceType" binding:"required,oneof=user_field custom_claim static"`
+	SourceValue string `json:"sourceValue" binding:"required,min=1,max=1000"`
 }
 
 type OidcUpdateAllowedUserGroupsDto struct {

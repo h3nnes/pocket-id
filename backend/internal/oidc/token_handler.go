@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/ory/fosite"
+	"github.com/pocket-id/pocket-id/backend/internal/model"
 )
 
 type tokenHandler struct {
@@ -44,7 +45,10 @@ func (h *tokenHandler) token(c *gin.Context) {
 		return
 	}
 
-	if client, ok := accessRequest.GetClient().(Client); ok {
+	// Extract the client once so it can also be threaded into the claim-application step below
+	// A non-Client value (should not happen in production) leaves clientPtr nil so remapping is skipped
+	client, hasClient := accessRequest.GetClient().(Client)
+	if hasClient {
 		// Re-validate the resource owner on every user-bound grant.
 		err := h.claimsService.ValidateUserAccess(ctx, requestSession.Subject, client)
 		if err != nil {
@@ -86,18 +90,22 @@ func (h *tokenHandler) token(c *gin.Context) {
 		}
 	}
 
-	err = h.claimsService.applyIDTokenClaims(ctx, requestSession, accessRequest.GetGrantedScopes())
+	// Thread the OIDC client into claim application so per-client remappings can override standard claims
+	var clientPtr *model.OidcClient
+	if hasClient {
+		clientPtr = &client.OidcClient
+	}
+	err = h.claimsService.applyIDTokenClaims(ctx, requestSession, accessRequest.GetGrantedScopes(), clientPtr)
 	if err != nil {
 		slog.ErrorContext(ctx, "Failed to apply ID token claims", "error", err)
 		h.provider.WriteAccessError(ctx, c.Writer, accessRequest, err)
 		return
 	}
 
-	// The client credentials grant has no resource owner, so no subject is ever set. Assign a
-	// stable synthetic subject so the issued JWT access token still carries a subclaim.
+	// The client credentials grant has no resource owner, so no subject is ever set
+	// Assign a stable synthetic subject so the issued JWT access token still carries a subclaim
 	if requestSession.Subject == "" {
-		client, ok := accessRequest.GetClient().(Client)
-		if ok && accessRequest.GetGrantTypes().Has(string(fosite.GrantTypeClientCredentials)) {
+		if hasClient && accessRequest.GetGrantTypes().Has(string(fosite.GrantTypeClientCredentials)) {
 			requestSession.Subject = "client-" + client.GetID()
 		}
 	}
