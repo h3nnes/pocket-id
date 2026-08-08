@@ -13,7 +13,9 @@ import (
 	"github.com/pocket-id/pocket-id/backend/internal/devicelogin"
 	"github.com/pocket-id/pocket-id/backend/internal/email"
 	"github.com/pocket-id/pocket-id/backend/internal/emailverification"
+	"github.com/pocket-id/pocket-id/backend/internal/geolite"
 	"github.com/pocket-id/pocket-id/backend/internal/job"
+	"github.com/pocket-id/pocket-id/backend/internal/ldapsync"
 	"github.com/pocket-id/pocket-id/backend/internal/oidc"
 	"github.com/pocket-id/pocket-id/backend/internal/onetimeaccess"
 	"github.com/pocket-id/pocket-id/backend/internal/service"
@@ -27,7 +29,7 @@ type services struct {
 	appConfigService   *appconfig.AppConfigService
 	appImagesService   *service.AppImagesService
 	emailModule        *email.Module
-	geoLiteService     *service.GeoLiteService
+	geoLiteModule      *geolite.Module
 	auditLogService    *service.AuditLogService
 	jwtService         *service.JwtService
 	scimService        *service.ScimService
@@ -35,12 +37,12 @@ type services struct {
 	customClaimService *service.CustomClaimService
 	oidcService        *service.OidcService
 	userGroupService   *service.UserGroupService
-	ldapService        *service.LdapService
 	versionService     *service.VersionService
 	fileStorage        storage.FileStorage
 
 	apiKeyModule            *apikey.Module
 	deviceLoginModule       *devicelogin.Module
+	ldapSyncModule          *ldapsync.Module
 	oidcModule              *oidc.Module
 	webauthnModule          *webauthn.Module
 	userSignUpModule        *usersignup.Module
@@ -79,8 +81,17 @@ func initServices(
 		return nil, fmt.Errorf("failed to create email module: %w", err)
 	}
 
-	svc.geoLiteService = service.NewGeoLiteService(httpClient)
-	svc.auditLogService = service.NewAuditLogService(db, svc.emailModule, svc.geoLiteService, svc.appConfigService)
+	svc.geoLiteModule, err = geolite.New(ctx, geolite.Dependencies{
+		HTTPClient:  httpClient,
+		DBPath:      common.EnvConfig.GeoLiteDBPath,
+		DownloadURL: common.EnvConfig.GeoLiteDBUrl,
+		LicenseKey:  common.EnvConfig.MaxMindLicenseKey,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GeoLite module: %w", err)
+	}
+
+	svc.auditLogService = service.NewAuditLogService(db, svc.emailModule, svc.geoLiteModule, svc.appConfigService)
 	svc.jwtService, err = service.NewJwtService(ctx, db, instanceID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create JWT service: %w", err)
@@ -104,7 +115,7 @@ func initServices(
 		Signer:    svc.jwtService,
 		Reauth:    svc.webauthnModule,
 		AuditLog:  svc.auditLogService,
-		IPLocator: svc.geoLiteService,
+		IPLocator: svc.geoLiteModule,
 		AppConfig: svc.appConfigService,
 	})
 	if err != nil {
@@ -142,7 +153,21 @@ func initServices(
 
 	svc.userGroupService = service.NewUserGroupService(db, svc.scimService)
 	svc.userService = service.NewUserService(db, svc.jwtService, svc.auditLogService, svc.customClaimService, svc.appImagesService, svc.scimService, fileStorage)
-	svc.ldapService = service.NewLdapService(db, httpClient, svc.userService, svc.userGroupService, fileStorage)
+
+	svc.ldapSyncModule, err = ldapsync.New(ldapsync.Dependencies{
+		DB:          db,
+		Actors:      actors,
+		HTTPClient:  httpClient,
+		FileStorage: fileStorage,
+		Users:       svc.userService,
+		Groups:      svc.userGroupService,
+		AppConfig:   svc.appConfigService,
+		// Disable in test environment
+		ScheduleDisabled: common.EnvConfig.AppEnv.IsTest(),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create LDAP sync module: %w", err)
+	}
 
 	svc.apiKeyModule, err = apikey.New(ctx, apikey.Dependencies{
 		DB:           db,

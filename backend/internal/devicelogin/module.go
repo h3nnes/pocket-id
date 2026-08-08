@@ -28,11 +28,7 @@ type AuditLogger interface {
 }
 
 type IPLocationResolver interface {
-	GetLocationByIP(ipAddress string) (country, city string, err error)
-}
-
-type AppConfigProvider interface {
-	GetConfig(ctx context.Context) (*appconfig.AppConfigModel, error)
+	GetLocationByIP(ctx context.Context, ipAddress string) (country string, city string, err error)
 }
 
 type Dependencies struct {
@@ -44,7 +40,7 @@ type Dependencies struct {
 	Reauth    ReauthenticationTokenConsumer
 	AuditLog  AuditLogger
 	IPLocator IPLocationResolver
-	AppConfig AppConfigProvider
+	AppConfig appconfig.AppConfigResolver
 }
 
 type Module struct {
