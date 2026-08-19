@@ -91,8 +91,8 @@ type OidcClientSecretCreatedDto struct {
 type OidcClientCredentialsDto struct {
 	FederatedIdentities []OidcClientFederatedIdentityDto `json:"federatedIdentities,omitempty"`
 	// Secrets is read-only: secrets are managed through the dedicated client secret endpoints and any value sent by a client is ignored
-	Secrets         []OidcClientSecretDto             `json:"secrets"`
-	ClaimRemappings []OidcClientClaimRemappingDto     `json:"claimRemappings,omitempty"`
+	Secrets         []OidcClientSecretDto         `json:"secrets"`
+	ClaimRemappings []OidcClientClaimRemappingDto `json:"claimRemappings,omitempty"`
 }
 
 type OidcClientFederatedIdentityDto struct {
