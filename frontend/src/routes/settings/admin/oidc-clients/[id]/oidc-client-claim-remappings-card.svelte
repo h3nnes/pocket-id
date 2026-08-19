@@ -66,8 +66,9 @@
 
 		isLoading = true;
 		// Preserve credential sub-objects owned by other cards so submitting this card does not wipe them
+		// secrets and federatedIdentities are carried over from client.credentials when present, else defaulted empty
 		const merged: OidcClientCredentials = {
-			...(client.credentials ?? { federatedIdentities: [] }),
+			...(client.credentials ?? { federatedIdentities: [], secrets: [] }),
 			claimRemappings: data.credentials.claimRemappings
 		};
 		await callback(merged).finally(() => (isLoading = false));
