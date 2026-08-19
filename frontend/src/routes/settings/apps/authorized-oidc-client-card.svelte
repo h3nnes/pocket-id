@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import ImageBox from '$lib/components/image-box.svelte';
+	import Logo from '$lib/components/logo.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Card from '$lib/components/ui/card';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
@@ -8,7 +9,7 @@
 	import { m } from '$lib/paraglide/messages';
 	import userStore from '$lib/stores/user-store';
 	import type { AccessibleOidcClient, OidcClientMetaData } from '$lib/types/oidc.type';
-	import { cachedApplicationLogo, cachedOidcClientLogo } from '$lib/utils/cached-image-util';
+	import { cachedOidcClientLogo } from '$lib/utils/cached-image-util';
 	import { encodeClientIdParam } from '$lib/utils/client-id-util';
 	import {
 		LucideBan,
@@ -32,19 +33,24 @@
 </script>
 
 <Card.Root
-	class="border-muted group relative h-[160px] p-5 transition-all duration-200 hover:shadow-md sm:max-w-[50vw] md:max-w-[430px]"
-	data-testid="authorized-oidc-client-card"
+	class="border-muted group relative h-[160px] p-5 hover:shadow-md sm:max-w-[50vw] md:max-w-[450px]"
+	role="article"
+	aria-label={client.name}
 >
-	<Card.Content class=" p-0">
+	<Card.Content class="p-0">
 		<div class="flex gap-3">
 			<div class="aspect-square h-[56px]">
-				<ImageBox
-					class="size-14"
-					src={client.hasLogo
-						? cachedOidcClientLogo.getUrl(client.id, isLightMode)
-						: cachedApplicationLogo.getUrl(isLightMode)}
-					alt={m.name_logo({ name: client.name })}
-				/>
+				{#if client.hasLogo}
+					<ImageBox
+						class="size-14"
+						src={cachedOidcClientLogo.getUrl(client.id, isLightMode)}
+						alt={m.name_logo({ name: client.name })}
+					/>
+				{:else}
+					<div class="bg-muted flex size-14 items-center justify-center rounded-2xl p-3">
+						<Logo class="size-full" alt={m.name_logo({ name: client.name })} animate={false} />
+					</div>
+				{/if}
 			</div>
 			<div class="flex w-full justify-between gap-3">
 				<div class="h-20">
@@ -119,17 +125,18 @@
 			{:else}
 				<div></div>
 			{/if}
-			<Button
-				href={client.launchURL}
-				target="_blank"
-				size="sm"
-				class="h-8 text-xs"
-				rel="noopener noreferrer"
-				disabled={!client.launchURL}
-			>
-				{m.launch()}
-				<LucideExternalLink class="ml-1 size-3" />
-			</Button>
+			{#if client.launchURL}
+				<Button
+					href={client.launchURL}
+					target="_blank"
+					size="sm"
+					class="h-8 text-xs"
+					rel="noopener noreferrer"
+				>
+					{m.launch()}
+					<LucideExternalLink data-icon="inline-end" />
+				</Button>
+			{/if}
 		</div>
 	</Card.Content>
 </Card.Root>

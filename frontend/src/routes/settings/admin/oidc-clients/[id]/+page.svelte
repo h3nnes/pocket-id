@@ -16,17 +16,14 @@
 	import type {
 		OidcClientCreateWithLogo,
 		OidcClientCredentials,
+		OidcClientFederatedIdentity,
+		OidcClientSecret,
 		OidcClientTokenLifetimes
 	} from '$lib/types/oidc.type';
 	import type { ScimServiceProviderCreate } from '$lib/types/scim.type';
 	import { cachedOidcClientLogo } from '$lib/utils/cached-image-util';
 	import { axiosErrorToast } from '$lib/utils/error-util';
-	import {
-		LucideChevronLeft,
-		LucideInfo,
-		LucideRefreshCcw,
-		LucideTriangleAlert
-	} from '@lucide/svelte';
+	import { LucideChevronLeft, LucideInfo, LucideTriangleAlert } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { slide } from 'svelte/transition';
 	import { backNavigate } from '../../users/navigate-back-util';
@@ -35,6 +32,7 @@
 	import ApiAccessCard from './api-access-card.svelte';
 	import OidcClientClaimRemappingsCard from './oidc-client-claim-remappings-card.svelte';
 	import OidcClientFederatedCredentialsCard from './oidc-client-federated-credentials-card.svelte';
+	import OidcClientSecretsCard from './oidc-client-secrets-card.svelte';
 	import OidcClientTokenLifetimesCard from './oidc-client-token-lifetimes-card.svelte';
 	import ScimResourceProviderForm from './scim-resource-provider-form.svelte';
 
@@ -43,6 +41,9 @@
 		...data.client,
 		allowedUserGroupIds: data.client.allowedUserGroups.map((g) => g.id)
 	});
+
+	// Secrets are managed by their own endpoints, so they are kept out of the client object that the forms below submit
+	let clientSecrets = $state<OidcClientSecret[]>(data.client.credentials?.secrets ?? []);
 
 	let scimServiceProvider = $state(data.scimServiceProvider);
 	let showAllDetails = $state(false);
@@ -60,11 +61,7 @@
 		[m.userinfo_url()]: data.oidcConfiguration.userinfo_endpoint,
 		[m.logout_url()]: data.oidcConfiguration.end_session_endpoint,
 		[m.certificate_url()]: data.oidcConfiguration.jwks_uri,
-		[m.pkce()]: client.pkceEnabled ? m.enabled() : m.disabled(),
-		[m.requires_reauthentication()]: client.requiresReauthentication ? m.enabled() : m.disabled(),
-		[m.requires_pushed_authorization_requests()]: client.requiresPushedAuthorizationRequests
-			? m.enabled()
-			: m.disabled()
+		[m.pkce()]: client.pkceEnabled ? m.enabled() : m.disabled()
 	});
 
 	async function updateClient(updatedClient: OidcClientCreateWithLogo) {
@@ -126,7 +123,14 @@
 		return success;
 	}
 
-	async function updateFederatedCredentials(credentials: OidcClientCredentials) {
+	async function updateFederatedCredentials(federatedIdentities: OidcClientFederatedIdentity[]) {
+		// Secrets are read-only in this request, but they are carried over so the client object keeps matching what the server has
+		// Claim remappings are also carried over so submitting federated identities does not wipe them
+		const credentials: OidcClientCredentials = {
+			federatedIdentities,
+			secrets: clientSecrets,
+			claimRemappings: client.credentials?.claimRemappings ?? []
+		};
 		const success = await updateClient({ ...client, credentials });
 		if (success) {
 			client.credentials = credentials;
@@ -180,26 +184,6 @@
 							client.isGroupRestricted = false;
 						})
 						.catch(axiosErrorToast);
-				}
-			}
-		});
-	}
-
-	async function createClientSecret() {
-		openConfirmDialog({
-			title: m.create_new_client_secret(),
-			message: m.are_you_sure_you_want_to_create_a_new_client_secret(),
-			confirm: {
-				label: m.generate(),
-				destructive: true,
-				action: async () => {
-					try {
-						const clientSecret = await oidcService.createClientSecret(client.id);
-						clientSecretStore.set(clientSecret);
-						toast.success(m.new_client_secret_created_successfully());
-					} catch (e) {
-						axiosErrorToast(e);
-					}
 				}
 			}
 		});
@@ -292,6 +276,7 @@
 					<LucideTriangleAlert class="ml-0.5 size-4 text-yellow-600 dark:text-yellow-400" />
 				{/if}</Tabs.Trigger
 			>
+			<Tabs.Trigger value="credentials">{m.credentials()}</Tabs.Trigger>
 			<Tabs.Trigger value="api-access">{m.api_access()}</Tabs.Trigger>
 			<Tabs.Trigger value="scim">{m.scim_provisioning()}</Tabs.Trigger>
 			<Tabs.Trigger value="preview">{m.oidc_data_preview()}</Tabs.Trigger>
@@ -313,32 +298,6 @@
 							</span>
 						</CopyToClipboard>
 					</div>
-					{#if !client.isPublic}
-						<div class="mt-1 mb-2 flex flex-col sm:flex-row sm:items-center">
-							<Field.Label class="w-52">{m.client_secret()}</Field.Label>
-							{#if $clientSecretStore}
-								<CopyToClipboard value={$clientSecretStore}>
-									<span class="text-muted-foreground text-sm" data-testid="client-secret">
-										{$clientSecretStore}
-									</span>
-								</CopyToClipboard>
-							{:else}
-								<div>
-									<span class="text-muted-foreground text-sm" data-testid="client-secret"
-										>••••••••••••••••••••••••••••••••</span
-									>
-									<Button
-										class="ml-2"
-										onclick={createClientSecret}
-										size="sm"
-										variant="ghost"
-										aria-label="Create new client secret"
-										><LucideRefreshCcw class="size-3" /></Button
-									>
-								</div>
-							{/if}
-						</div>
-					{/if}
 					{#if showAllDetails}
 						<div transition:slide>
 							{#each Object.entries(setupDetails) as [key, value] (key)}
@@ -370,6 +329,10 @@
 		</Card.Root>
 
 		<OidcClientTokenLifetimesCard {client} callback={updateTokenLifetimes} />
+	</Tabs.Content>
+
+	<Tabs.Content value="credentials" id="credentials" class="flex flex-col gap-4">
+		<OidcClientSecretsCard {client} bind:secrets={clientSecrets} />
 
 		<OidcClientFederatedCredentialsCard {client} callback={updateFederatedCredentials} />
 
@@ -410,15 +373,7 @@
 	</Tabs.Content>
 
 	<Tabs.Content value="api-access" id="api-access">
-		<Card.Root>
-			<Card.Header>
-				<Card.Title>{m.api_access()}</Card.Title>
-				<Card.Description>{m.api_access_description()}</Card.Description>
-			</Card.Header>
-			<Card.Content>
-				<ApiAccessCard clientId={client.id} isPublicClient={client.isPublic} />
-			</Card.Content>
-		</Card.Root>
+		<ApiAccessCard clientId={client.id} isPublicClient={client.isPublic} />
 	</Tabs.Content>
 
 	<Tabs.Content value="scim" id="scim-provisioning">

@@ -16,6 +16,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	"github.com/pocket-id/pocket-id/backend/internal/apperror"
+	"github.com/pocket-id/pocket-id/backend/internal/dto"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -105,13 +106,6 @@ func (m *ErrorHandlerMiddleware) Add() gin.HandlerFunc {
 	}
 }
 
-type errorResponseBody struct {
-	Error     string         `json:"error"`
-	Code      apperror.Code  `json:"code"`
-	Details   map[string]any `json:"details,omitempty"`
-	RequestID string         `json:"request_id,omitempty"`
-}
-
 func classifyError(err error) classifiedError {
 	var structuredErr *apperror.Error
 	if errors.As(err, &structuredErr) && structuredErr != nil {
@@ -158,7 +152,7 @@ func classifiedValidationError(validationErrors validator.ValidationErrors) clas
 
 	for _, validationError := range validationErrors {
 		fieldName := validationError.Field()
-		code, message := validationFieldError(validationError)
+		code, message := dto.ValidationErrorDetails(validationError)
 		fields = append(fields, apperror.FieldError{
 			Field:   fieldName,
 			Code:    code,
@@ -175,27 +169,6 @@ func classifiedValidationError(validationErrors validator.ValidationErrors) clas
 	}
 }
 
-func validationFieldError(validationError validator.FieldError) (string, string) {
-	switch validationError.Tag() {
-	case "required":
-		return "required", "is required"
-	case "email":
-		return "invalid_format", "must be a valid email address"
-	case "username":
-		return "invalid_format", "must only contain letters, numbers, underscores, dots, hyphens, and '@' symbols and not start or end with a special character"
-	case "url":
-		return "invalid_format", "must be a valid URL"
-	case "resource_uri":
-		return "invalid_format", "must be an absolute URI without whitespace or a fragment"
-	case "min":
-		return "too_short", fmt.Sprintf("must be at least %s characters long", validationError.Param())
-	case "max":
-		return "too_long", fmt.Sprintf("must be at most %s characters long", validationError.Param())
-	default:
-		return validationError.Tag(), "is invalid"
-	}
-}
-
 func writeErrorResponse(c *gin.Context, classified classifiedError, requestID string) {
 	details := make(map[string]any, len(classified.details)+1)
 	for key, value := range classified.details {
@@ -208,7 +181,7 @@ func writeErrorResponse(c *gin.Context, classified classifiedError, requestID st
 		details = nil
 	}
 
-	response := errorResponseBody{
+	response := dto.ErrorDto{
 		Error:     classified.message,
 		Code:      classified.code,
 		Details:   details,
