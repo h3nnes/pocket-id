@@ -13,6 +13,7 @@
 	import ScimService from '$lib/services/scim-service';
 	import clientSecretStore from '$lib/stores/client-secret-store';
 	import type {
+		OidcClientClaimRemapping,
 		OidcClientCreateWithLogo,
 		OidcClientCredentials,
 		OidcClientFederatedIdentity,
@@ -133,17 +134,17 @@
 	}
 
 	// updateClaimRemappings reuses the same PUT /oidc/clients/:id endpoint and mirrors the federated-credentials flow
-	// The submitted credentials object is expected to already carry any other credential sub-objects merged in by the card
-	// updateClient reports failures by throwing, and the card expects a boolean, so the error is caught and surfaced here
-	async function updateClaimRemappings(credentials: OidcClientCredentials) {
-		try {
-			await updateClient({ ...client, credentials });
-			client.credentials = credentials;
-			return true;
-		} catch (e) {
-			axiosErrorToast(e);
-			return false;
-		}
+	// The credentials object is rebuilt with the sibling sub-objects carried over so saving remappings does not wipe them
+	async function updateClaimRemappings(claimRemappings: OidcClientClaimRemapping[]) {
+		// Secrets are read-only in this request, but they are carried over so the client object keeps matching what the server has
+		// Federated identities are also carried over so submitting claim remappings does not wipe them
+		const credentials: OidcClientCredentials = {
+			federatedIdentities: client.credentials?.federatedIdentities ?? [],
+			secrets: clientSecrets,
+			claimRemappings
+		};
+		await updateClient({ ...client, credentials });
+		client.credentials = credentials;
 	}
 
 	async function enableGroupRestriction() {
