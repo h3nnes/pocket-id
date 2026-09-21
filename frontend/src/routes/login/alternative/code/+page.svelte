@@ -24,7 +24,6 @@
 	let longCodeRequested = $state(
 		code.length > shortCodeLength || !$appConfigStore.emailOneTimeAccessAsUnauthenticatedEnabled
 	);
-	let showLongCodeOption = $state($appConfigStore.emailOneTimeAccessAsUnauthenticatedEnabled);
 	let codeComplete = $derived(
 		longCodeRequested ? code.length === longCodeLength : code.length === shortCodeLength
 	);
@@ -33,7 +32,7 @@
 
 	// If the previous page is a Pocket ID page, go back there instead of the generic alternative login page
 	afterNavigate((e) => {
-		if (e.from?.url.pathname) {
+		if (e.from?.url?.pathname) {
 			backHref = e.from.url.pathname + e.from.url.search;
 		}
 	});
@@ -47,7 +46,7 @@
 			await userStore.setUser(user);
 
 			try {
-				goto(data.redirect);
+				await goto(data.redirect);
 			} catch {
 				error = m.invalid_redirect_url();
 			}
@@ -61,10 +60,6 @@
 	onMount(() => {
 		if (code) {
 			authenticate();
-		}
-
-		if (data.redirect.startsWith('/interaction')) {
-			showLongCodeOption = false;
 		}
 	});
 </script>
@@ -108,7 +103,7 @@
 					{/snippet}
 				</InputOTP.Root>
 			{/if}
-			{#if !longCodeRequested && showLongCodeOption}
+			{#if !longCodeRequested}
 				<div class="flex justify-center">
 					<Button
 						class="mt-2 text-muted-foreground text-xs"

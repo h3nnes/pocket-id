@@ -7,14 +7,15 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 
-	"github.com/lestrrat-go/jwx/v3/jwa"
-	"github.com/lestrrat-go/jwx/v3/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
 
 	"github.com/pocket-id/pocket-id/backend/internal/common"
 	"github.com/pocket-id/pocket-id/backend/internal/utils/crypto"
@@ -24,6 +25,12 @@ const (
 	// KeyUsageSigning is the usage for the private keys, for the "use" property
 	KeyUsageSigning = "sig"
 )
+
+// SessionKeyAlg returns the algorithm used to sign session tokens
+func SessionKeyAlg() jwa.SignatureAlgorithm {
+	// Session tokens are only consumed by Pocket ID itself, so use a faster symmetric key that's kept private
+	return jwa.HS256()
+}
 
 // EncodeJWK encodes a jwk.Key to a writable stream.
 func EncodeJWK(w io.Writer, key jwk.Key) error {
@@ -58,7 +65,7 @@ func LoadKeyEncryptionKey(envConfig *common.EnvConfigSchema, instanceID string) 
 // ImportRawKey imports a crypto key in "raw" format (e.g. crypto.PrivateKey) into a jwk.Key.
 // It also populates additional fields such as the key ID, usage, and alg.
 func ImportRawKey(rawKey any, alg string, crv string) (jwk.Key, error) {
-	key, err := jwk.Import(rawKey)
+	key, err := jwk.Import[jwk.Key](rawKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to import generated private key: %w", err)
 	}
@@ -124,6 +131,9 @@ func EnsureAlgInKey(key jwk.Key, alg string, crv string) {
 		// Default to EdDSA and Ed25519 for OKP keys
 		_ = key.Set(jwk.AlgorithmKey, jwa.EdDSA())
 		_ = key.Set(jwk.OKPCrvKey, jwa.Ed25519())
+	case jwa.OctetSeq():
+		// Default to HS256 for symmetric keys
+		_ = key.Set(jwk.AlgorithmKey, jwa.HS256())
 	}
 }
 
@@ -159,4 +169,17 @@ func GenerateKey(alg string, crv string) (key jwk.Key, err error) {
 
 	// Import the raw key
 	return ImportRawKey(rawKey, alg, crv)
+}
+
+// GenerateSessionKey generates a new symmetric key used to sign session tokens
+func GenerateSessionKey() (jwk.Key, error) {
+	// Use HS256, which is based on SHA256
+	rawKey := make([]byte, sha256.Size)
+	_, err := io.ReadFull(rand.Reader, rawKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate session key: %w", err)
+	}
+
+	// Import the raw key
+	return ImportRawKey(rawKey, SessionKeyAlg().String(), "")
 }

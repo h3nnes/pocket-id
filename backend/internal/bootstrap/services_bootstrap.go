@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/italypaleale/francis/host/local"
+	francishost "github.com/italypaleale/francis/host"
 	"github.com/pocket-id/pocket-id/backend/internal/api"
 	"github.com/pocket-id/pocket-id/backend/internal/apikey"
 	"github.com/pocket-id/pocket-id/backend/internal/appconfig"
@@ -14,6 +14,7 @@ import (
 	"github.com/pocket-id/pocket-id/backend/internal/devicelogin"
 	"github.com/pocket-id/pocket-id/backend/internal/email"
 	"github.com/pocket-id/pocket-id/backend/internal/emailverification"
+	"github.com/pocket-id/pocket-id/backend/internal/environment"
 	"github.com/pocket-id/pocket-id/backend/internal/geolite"
 	"github.com/pocket-id/pocket-id/backend/internal/ldapsync"
 	"github.com/pocket-id/pocket-id/backend/internal/oidc"
@@ -37,7 +38,6 @@ type services struct {
 	customClaimService *service.CustomClaimService
 	oidcService        *service.OidcService
 	userGroupService   *service.UserGroupService
-	versionService     *service.VersionService
 	fileStorage        storage.FileStorage
 
 	apiKeyModule            *apikey.Module
@@ -51,7 +51,8 @@ type services struct {
 	oneTimeAccessModule     *onetimeaccess.Module
 	emailVerificationModule *emailverification.Module
 	apiModule               *api.Module
-	actors                  *local.Host
+	environmentModule       *environment.Module
+	actors                  francishost.Host
 }
 
 // Initializes all services
@@ -59,7 +60,7 @@ func initServices(
 	ctx context.Context,
 	db *gorm.DB,
 	instanceID string,
-	actors *local.Host,
+	actors francishost.Host,
 	httpClient *http.Client,
 	imageExtensions map[string]string,
 	fileStorage storage.FileStorage,
@@ -247,7 +248,10 @@ func initServices(
 		return nil, fmt.Errorf("failed to create email verification module: %w", err)
 	}
 
-	svc.versionService = service.NewVersionService(httpClient)
+	svc.environmentModule = environment.New(environment.Dependencies{
+		HTTPClient:                  httpClient,
+		SQLiteOnNetworkedFilesystem: sqliteOnNetworkedFilesystem,
+	})
 
 	return svc, nil
 }

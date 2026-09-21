@@ -10,14 +10,15 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"uuid"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	"github.com/go-playground/validator/v10"
-	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/pocket-id/pocket-id/backend/internal/apperror"
 	"github.com/pocket-id/pocket-id/backend/internal/dto"
-	"go.opentelemetry.io/otel/trace"
 )
 
 const requestIDHeader = "X-Request-ID"
@@ -81,7 +82,7 @@ type classifiedError struct {
 // Add records a request ID before executing the request and serializes the first returned error afterward
 func (m *ErrorHandlerMiddleware) Add() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		requestID := uuid.NewString()
+		requestID := uuid.NewV4().String()
 		c.Set(requestIDContextKey{}, requestID)
 		c.Header(requestIDHeader, requestID)
 
@@ -193,6 +194,22 @@ func writeErrorResponse(c *gin.Context, classified classifiedError, requestID st
 
 func logRequestError(c *gin.Context, err error, classified classifiedError, requestID string) {
 	if classified.status < http.StatusInternalServerError {
+		cause := errors.Unwrap(err)
+		if cause == nil {
+			return
+		}
+
+		slog.DebugContext(c.Request.Context(), "Request rejected",
+			slog.String("error_code", string(classified.code)),
+			slog.String("error_type", errorTypeName(err)),
+			slog.String("cause_type", errorTypeName(cause)),
+			slog.Int("http_status", classified.status),
+			slog.String("request_id", requestID),
+			slog.String("http_method", c.Request.Method),
+			slog.String("http_path", c.Request.URL.Path),
+			slog.Any("error", err),
+			slog.Any("cause", cause),
+		)
 		return
 	}
 

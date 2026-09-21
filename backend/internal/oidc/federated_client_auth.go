@@ -11,12 +11,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jwx-go/jwkfetch/v4"
 	"github.com/lestrrat-go/httprc/v3"
 	"github.com/lestrrat-go/httprc/v3/errsink"
-	"github.com/lestrrat-go/jwx/v3/jwk"
-	"github.com/lestrrat-go/jwx/v3/jws"
-	"github.com/lestrrat-go/jwx/v3/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/ory/fosite"
+
+	"github.com/pocket-id/pocket-id/backend/internal/model"
+	jwkutils "github.com/pocket-id/pocket-id/backend/internal/utils/jwk"
 )
 
 const clientAssertionTypeJWTBearer = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" // #nosec G101 -- OAuth assertion type identifier, not a credential
@@ -35,7 +39,7 @@ type federatedClientStore interface {
 type federatedClientAuthenticator struct {
 	clients         federatedClientStore
 	httpClient      *http.Client
-	jwksCache       *jwk.Cache
+	jwksCache       *jwkfetch.Cache
 	defaultAudience string
 }
 
@@ -55,7 +59,7 @@ func newFederatedClientAuthenticator(ctx context.Context, clients federatedClien
 	return authenticator, nil
 }
 
-func (a *federatedClientAuthenticator) getJWKCache(ctx context.Context) (*jwk.Cache, error) {
+func (a *federatedClientAuthenticator) getJWKCache(ctx context.Context) (*jwkfetch.Cache, error) {
 	// We need to create a custom HTTP client to set a timeout.
 	client := a.httpClient
 	if client == nil {
@@ -73,11 +77,12 @@ func (a *federatedClientAuthenticator) getJWKCache(ctx context.Context) (*jwk.Ca
 		client.Transport = transport
 	}
 
-	return jwk.NewCache(ctx,
+	return jwkfetch.NewCache(ctx,
 		httprc.NewClient(
 			httprc.WithErrorSink(errsink.NewSlog(slog.Default())),
 			httprc.WithHTTPClient(client),
 		),
+		jwkfetch.WithHTTPClient(client),
 	)
 }
 
@@ -143,14 +148,9 @@ func (a *federatedClientAuthenticator) authenticateAssertion(ctx context.Context
 		return nil, errNoFederatedClientAssertion
 	}
 
-	jwksURL := federatedIdentity.JWKS
-	if jwksURL == "" {
-		jwksURL = strings.TrimRight(issuer, "/") + "/.well-known/jwks.json"
-	}
-
-	jwks, err := a.fetchJWKSet(ctx, jwksURL)
+	jwks, err := a.keySetForIdentity(ctx, federatedIdentity)
 	if err != nil {
-		return nil, fosite.ErrInvalidClient.WithHint("Unable to fetch client assertion JWKS.").WithWrap(err)
+		return nil, err
 	}
 
 	audience := federatedIdentity.Audience
@@ -196,23 +196,42 @@ func (a *federatedClientAuthenticator) authenticateAssertion(ctx context.Context
 	return client, nil
 }
 
+// keySetForIdentity returns the keys that may have signed an assertion for the given identity.
+// Identities with public keys configured are verified against those alone, so no JWKS is fetched over the network.
+func (a *federatedClientAuthenticator) keySetForIdentity(ctx context.Context, federatedIdentity model.OidcClientFederatedIdentity) (jwk.Set, error) {
+	if len(federatedIdentity.PublicKeys) > 0 {
+		jwks, err := jwkutils.ParsePublicKeySet(federatedIdentity.PublicKeys)
+		if err != nil {
+			return nil, fosite.ErrInvalidClient.WithHint("Unable to load the public keys configured for the client assertion.").WithWrap(err)
+		}
+		return jwks, nil
+	}
+
+	jwksURL := federatedIdentity.JWKS
+	if jwksURL == "" {
+		jwksURL = strings.TrimRight(federatedIdentity.Issuer, "/") + "/.well-known/jwks.json"
+	}
+
+	jwks, err := a.fetchJWKSet(ctx, jwksURL)
+	if err != nil {
+		return nil, fosite.ErrInvalidClient.WithHint("Unable to fetch client assertion JWKS.").WithWrap(err)
+	}
+
+	return jwks, nil
+}
+
 func (a *federatedClientAuthenticator) fetchJWKSet(ctx context.Context, jwksURL string) (jwk.Set, error) {
 	if !a.jwksCache.IsRegistered(ctx, jwksURL) {
 		// We set a timeout because otherwise Register will keep trying in case of errors
 		registerCtx, registerCancel := context.WithTimeout(ctx, 15*time.Second)
 		defer registerCancel()
 
-		registerOptions := []jwk.RegisterOption{
-			jwk.WithMaxInterval(24 * time.Hour),
-			jwk.WithMinInterval(15 * time.Minute),
-			jwk.WithWaitReady(true),
-		}
-		if a.httpClient != nil {
-			registerOptions = append(registerOptions, jwk.WithHTTPClient(a.httpClient))
-		}
-
 		// We need to register the URL
-		err := a.jwksCache.Register(registerCtx, jwksURL, registerOptions...)
+		err := a.jwksCache.Register(registerCtx, jwksURL,
+			jwkfetch.WithMaxInterval(24*time.Hour),
+			jwkfetch.WithMinInterval(15*time.Minute),
+			jwkfetch.WithWaitReady(true),
+		)
 		// In case of race conditions (two goroutines calling jwkCache.Register at the same time), it's possible we can get a conflict anyways, so we ignore that error
 		if err != nil && !errors.Is(err, httprc.ErrResourceAlreadyExists()) {
 			return nil, fmt.Errorf("failed to register JWK set: %w", err)

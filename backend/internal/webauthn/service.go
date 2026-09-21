@@ -99,7 +99,7 @@ func (s *Service) BeginRegistration(ctx context.Context, dbConfig *appconfig.App
 		}),
 		gowebauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementRequired),
 		gowebauthn.WithExclusions(user.WebAuthnCredentialDescriptors()),
-		gowebauthn.WithExtensions(map[string]any{"credProps": true}), // Required for Firefox Android to properly save the key in Google password manager
+		gowebauthn.WithExtensions(gowebauthn.WithExtensionCredProps()), // Required for Firefox Android to properly save the key in Google password manager
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin WebAuthn registration: %w", err)
@@ -110,6 +110,7 @@ func (s *Service) BeginRegistration(ctx context.Context, dbConfig *appconfig.App
 		Challenge:        session.Challenge,
 		CredentialParams: session.CredParams,
 		UserVerification: string(session.UserVerification),
+		Extensions:       session.Extensions,
 	}
 
 	err = tx.
@@ -156,6 +157,7 @@ func (s *Service) VerifyRegistration(ctx context.Context, dbConfig *appconfig.Ap
 		Expires:          storedSession.ExpiresAt.ToTime(),
 		CredParams:       storedSession.CredentialParams,
 		UserVerification: protocol.UserVerificationRequirement(storedSession.UserVerification),
+		Extensions:       storedSession.Extensions,
 		UserID:           []byte(userID),
 	}
 
@@ -181,6 +183,7 @@ func (s *Service) VerifyRegistration(ctx context.Context, dbConfig *appconfig.Ap
 
 	// Determine passkey name using AAGUID and User-Agent
 	passkeyName := s.determinePasskeyName(credential.Authenticator.AAGUID)
+	aaguid := utils.FormatAAGUID(credential.Authenticator.AAGUID)
 
 	credentialToStore := model.WebauthnCredential{
 		Name:            passkeyName,
@@ -191,6 +194,7 @@ func (s *Service) VerifyRegistration(ctx context.Context, dbConfig *appconfig.Ap
 		UserID:          user.ID,
 		BackupEligible:  credential.Flags.BackupEligible,
 		BackupState:     credential.Flags.BackupState,
+		AAGUID:          aaguid,
 	}
 	err = tx.
 		WithContext(ctx).
@@ -233,6 +237,7 @@ func (s *Service) BeginLogin(ctx context.Context, dbConfig *appconfig.AppConfigM
 		ExpiresAt:        datatype.DateTime(session.Expires),
 		Challenge:        session.Challenge,
 		UserVerification: string(session.UserVerification),
+		Extensions:       session.Extensions,
 	}
 
 	err = s.db.
@@ -273,8 +278,10 @@ func (s *Service) VerifyLogin(ctx context.Context, dbConfig *appconfig.AppConfig
 		Challenge:        storedSession.Challenge,
 		Expires:          storedSession.ExpiresAt.ToTime(),
 		UserVerification: protocol.UserVerificationRequirement(storedSession.UserVerification),
+		Extensions:       storedSession.Extensions,
 		CredParams:       storedSession.CredentialParams,
 	}
+	discardUnrequestedFalseAppIDOutput(session.Extensions, credentialAssertionData)
 
 	var user *model.User
 	_, err := s.webAuthn.ValidateDiscoverableLogin(func(_, userHandle []byte) (gowebauthn.User, error) {
@@ -526,8 +533,10 @@ func (s *Service) CreateReauthenticationTokenWithWebauthn(ctx context.Context, s
 		Challenge:        storedSession.Challenge,
 		Expires:          storedSession.ExpiresAt.ToTime(),
 		UserVerification: protocol.UserVerificationRequirement(storedSession.UserVerification),
+		Extensions:       storedSession.Extensions,
 		CredParams:       storedSession.CredentialParams,
 	}
+	discardUnrequestedFalseAppIDOutput(session.Extensions, credentialAssertionData)
 
 	// Validate the credential assertion
 	var user *model.User
@@ -580,6 +589,21 @@ func classifyPasskeyError(err error, fallback func(error) *apperror.Error) *appe
 	}
 
 	return fallback(err)
+}
+
+func discardUnrequestedFalseAppIDOutput(session protocol.SessionExtensions, credential *protocol.ParsedCredentialAssertionData) {
+	if credential == nil || credential.ClientExtensionResults.AppID == nil || *credential.ClientExtensionResults.AppID {
+		return
+	}
+
+	for _, requested := range session.Requested {
+		if requested == protocol.ExtensionAppID {
+			return
+		}
+	}
+
+	// Safari reports appid=false for security keys even when the relying party did not request the legacy extension
+	credential.ClientExtensionResults.AppID = nil
 }
 
 func (s *Service) ConsumeReauthenticationToken(ctx context.Context, tx *gorm.DB, token string, userID string) (time.Time, error) {

@@ -1,7 +1,9 @@
 import test, { expect, Page } from '@playwright/test';
+import * as jose from 'jose';
 import { oidcClients, userGroups } from '../data';
 import { cleanupBackend } from '../utils/cleanup.util';
 import * as oidcUtil from '../utils/oidc.util';
+import { saveUnsavedChanges } from '../utils/unsaved-changes.util';
 
 test.beforeEach(async () => await cleanupBackend());
 
@@ -76,12 +78,7 @@ test('Edit OIDC client', async ({ page }) => {
 	await page.locator('[role="tab"][data-value="dark-logo"]').first().click();
 	await page.setInputFiles('#oidc-client-logo-dark', 'resources/images/cloud-logo.png');
 	await page.getByLabel('Client Launch URL').fill(oidcClient.launchURL);
-	const clientForm = page.getByLabel('Name').locator('xpath=ancestor::form');
-	await clientForm.getByRole('button', { name: 'Save' }).click();
-
-	await expect(page.locator('[data-type="success"]')).toHaveText(
-		'OIDC client updated successfully'
-	);
+	await saveUnsavedChanges(page);
 	await expect(page.getByRole('img', { name: 'Nextcloud updated logo' }).first()).toBeVisible();
 	await page.request
 		.get(`/api/oidc/clients/${oidcClient.id}/logo`)
@@ -133,8 +130,7 @@ test('Update OIDC client token lifetimes', async ({ page }) => {
 	await expect(refreshLifetime).toHaveValue('720');
 	await refreshLifetime.fill('336');
 
-	await card.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByText('OIDC client updated successfully', { exact: true })).toBeVisible();
+	await saveUnsavedChanges(page);
 
 	await page.reload();
 	await expect(card.getByLabel('Access token lifetime', { exact: true })).toHaveValue('90');
@@ -145,21 +141,44 @@ test('Update OIDC client token lifetimes', async ({ page }) => {
 	await expect(card.getByLabel('Refresh token inactivity timeout unit')).toHaveText('Days');
 
 	await card.getByLabel('Access token lifetime', { exact: true }).fill('0');
-	await card.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(card.getByText('Token lifetime must be at least 1 minute.')).toBeVisible();
 
 	await card.getByLabel('Access token lifetime', { exact: true }).fill('525601');
-	await card.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(card.getByText('Token lifetime cannot exceed 365 days.')).toBeVisible();
 
 	await card.getByLabel('Access token lifetime', { exact: true }).fill('1.5');
-	await card.getByRole('button', { name: 'Save' }).click();
+	await page.getByRole('button', { name: 'Save', exact: true }).click();
 	await expect(card.getByText('Token lifetime must use whole-minute increments.')).toBeVisible();
 
 	await card.getByLabel('Access token lifetime', { exact: true }).fill('60');
 	await card.getByLabel('Refresh token inactivity timeout', { exact: true }).fill('30');
-	await card.getByRole('button', { name: 'Save' }).click();
-	await expect(page.getByText('OIDC client updated successfully', { exact: true })).toBeVisible();
+	await saveUnsavedChanges(page);
+});
+
+test('Save OIDC client details and token lifetimes together', async ({ page }) => {
+	const client = oidcClients.nextcloud;
+	await page.goto(`/settings/admin/oidc-clients/${client.id}`);
+
+	const name = page.getByLabel('Name');
+	const accessLifetime = page
+		.getByTestId('token-lifetimes-card')
+		.getByLabel('Access token lifetime', { exact: true });
+	await name.fill('Nextcloud with custom lifetime');
+	await accessLifetime.fill('2');
+	await page.getByRole('button', { name: 'Discard', exact: true }).click();
+	await expect(name).toHaveValue(client.name);
+	await expect(accessLifetime).toHaveValue('1');
+
+	await name.fill('Nextcloud with custom lifetime');
+	await accessLifetime.fill('2');
+
+	await saveUnsavedChanges(page);
+
+	await page.reload();
+	await expect(name).toHaveValue('Nextcloud with custom lifetime');
+	await expect(accessLifetime).toHaveValue('2');
 });
 
 test('Update OIDC client federated credentials', async ({ page }) => {
@@ -177,7 +196,7 @@ test('Update OIDC client federated credentials', async ({ page }) => {
 			response.request().method() === 'PUT' &&
 			response.url().endsWith(`/api/oidc/clients/${client.id}`)
 	);
-	await card.getByRole('button', { name: 'Save' }).click();
+	await saveUnsavedChanges(page);
 	expect((await cardUpdate).ok()).toBeTruthy();
 
 	await page.reload();
@@ -185,21 +204,140 @@ test('Update OIDC client federated credentials', async ({ page }) => {
 	await expect(card.getByLabel('Subject')).toHaveValue('workload-client');
 	await expect(card.getByLabel('Audience')).toHaveValue('https://pocket-id.example.com');
 
+	await card.getByRole('radio', { name: 'Public keys' }).click();
+	await card.getByRole('button', { name: 'Add another federated client credential' }).click();
+	await expect(card.getByLabel('Issuer')).toHaveCount(2);
+	await page.getByRole('button', { name: 'Discard', exact: true }).click();
+	await expect(card.getByLabel('Issuer')).toHaveCount(1);
+	await expect(card.getByRole('radio', { name: 'JWKS URL' })).toBeChecked();
+
 	// Saving the main client form must preserve credentials managed by the separate card
 	await page.locator('[role="tab"][data-value="general"]').click();
 	const description = page.getByLabel('Description');
 	await description.fill('Updated without replacing federated credentials');
-	const clientForm = description.locator('xpath=ancestor::form');
 	const formUpdate = page.waitForResponse(
 		(response) =>
 			response.request().method() === 'PUT' &&
 			response.url().endsWith(`/api/oidc/clients/${client.id}`)
 	);
-	await clientForm.getByRole('button', { name: 'Save' }).click();
+	await saveUnsavedChanges(page);
 	expect((await formUpdate).ok()).toBeTruthy();
 
 	await page.goto(`/settings/admin/oidc-clients/${client.id}#credentials`);
 	await expect(card.getByLabel('Issuer')).toHaveValue('https://issuer.example.com');
+});
+
+test('Update OIDC client federated credentials with public keys', async ({ page }) => {
+	const client = oidcClients.nextcloud;
+	const issuer = 'https://agent.example.com';
+	const audience = 'api://agent-test';
+
+	async function generatePublicJwk(kid: string) {
+		const { publicKey, privateKey } = await jose.generateKeyPair('ES256', { extractable: true });
+		return { privateKey, jwk: { ...(await jose.exportJWK(publicKey)), kid, alg: 'ES256' } };
+	}
+
+	const first = await generatePublicJwk('agent-key-1');
+	const second = await generatePublicJwk('agent-key-2');
+	const third = await generatePublicJwk('agent-key-3');
+
+	await page.goto(`/settings/admin/oidc-clients/${client.id}#credentials`);
+
+	const card = page.getByTestId('federated-credentials-card');
+	await card.getByRole('button', { name: 'Create', exact: true }).click();
+	await card.getByLabel('Issuer').fill(issuer);
+	await card.getByLabel('Audience').fill(audience);
+	await card.getByRole('radio', { name: 'Public keys' }).click();
+
+	const pasteInput = card.getByLabel('Public key', { exact: true });
+	const addKeyButton = card.getByRole('button', { name: 'Add public key' });
+	const publicKeys = card.getByTestId('federated-identity-public-key');
+	const saveButton = page.getByRole('button', { name: 'Save', exact: true });
+	const waitForClientUpdate = () =>
+		page.waitForResponse(
+			(response) =>
+				response.request().method() === 'PUT' &&
+				response.url().endsWith(`/api/oidc/clients/${client.id}`)
+		);
+
+	// A single JWK is imported as one key
+	await pasteInput.fill(JSON.stringify(first.jwk));
+	await addKeyButton.click();
+	await expect(publicKeys).toHaveCount(1);
+	await expect(publicKeys.first()).toContainText('agent-key-1');
+
+	// A JWKS is imported as one key per entry
+	await pasteInput.fill(JSON.stringify({ keys: [second.jwk, third.jwk] }));
+	await addKeyButton.click();
+	await expect(publicKeys).toHaveCount(3);
+
+	// Private keys pass the JSON-only importer but are rejected by the backend
+	await pasteInput.fill(JSON.stringify(await jose.exportJWK(first.privateKey)));
+	await addKeyButton.click();
+	await expect(publicKeys).toHaveCount(4);
+	const privateKeyUpdate = waitForClientUpdate();
+	await saveButton.click();
+	expect((await privateKeyUpdate).status()).toBe(400);
+	await expect(page.getByText(/private key material/)).toBeVisible();
+	await publicKeys.last().getByRole('button').click();
+	await expect(publicKeys).toHaveCount(3);
+
+	// Keys without a key ID pass the JSON-only importer but are rejected by the backend
+	const { kid, ...withoutKeyId } = third.jwk;
+	await pasteInput.fill(JSON.stringify(withoutKeyId));
+	await addKeyButton.click();
+	await expect(publicKeys).toHaveCount(4);
+	const missingKeyIdUpdate = waitForClientUpdate();
+	await saveButton.click();
+	expect((await missingKeyIdUpdate).status()).toBe(400);
+	await expect(page.getByText(/missing the "kid" property/)).toBeVisible();
+	await publicKeys.last().getByRole('button').click();
+	await expect(publicKeys).toHaveCount(3);
+
+	await card.getByRole('button', { name: `Remove public key ${third.jwk.kid}` }).click();
+	await expect(publicKeys).toHaveCount(2);
+
+	const cardUpdate = waitForClientUpdate();
+	await saveUnsavedChanges(page);
+	expect((await cardUpdate).ok()).toBeTruthy();
+
+	await page.reload();
+	await expect(card.getByRole('radio', { name: 'Public keys' })).toBeChecked();
+	await expect(publicKeys).toHaveCount(2);
+	await expect(publicKeys.first()).toContainText('agent-key-1');
+
+	// The stored keys authenticate a client assertion signed with the matching private key
+	async function authenticateWithAssertion(key: CryptoKey, keyId: string, jti: string) {
+		const assertion = await new jose.SignJWT({})
+			.setProtectedHeader({ alg: 'ES256', kid: keyId })
+			.setIssuer(issuer)
+			.setSubject(client.id)
+			.setAudience(audience)
+			.setJti(jti)
+			.setIssuedAt()
+			.setExpirationTime('5m')
+			.sign(key);
+
+		return oidcUtil.exchangeCode(page, {
+			grant_type: 'client_credentials',
+			client_id: client.id,
+			client_assertion_type: 'urn:ietf:params:oauth:client-assertion-type:jwt-bearer',
+			client_assertion: assertion
+		});
+	}
+
+	for (const key of [first, second]) {
+		const res = await authenticateWithAssertion(
+			key.privateKey,
+			key.jwk.kid,
+			`assertion-${key.jwk.kid}`
+		);
+		expect(res.access_token).toBeTruthy();
+	}
+
+	// The key that was removed can no longer authenticate the client
+	const res = await authenticateWithAssertion(third.privateKey, third.jwk.kid, 'assertion-removed');
+	expect(res.access_token).toBeFalsy();
 });
 
 test('Create and delete OIDC client secrets', async ({ page }) => {
@@ -348,9 +486,7 @@ test('Update OIDC client allowed user groups', async ({ page }) => {
 	await page.getByRole('row', { name: userGroups.designers.name }).getByRole('checkbox').click();
 	await page.getByRole('row', { name: userGroups.developers.name }).getByRole('checkbox').click();
 
-	await page.getByRole('button', { name: 'Save' }).click();
-
-	await expect(page.getByText('Allowed user groups updated successfully')).toBeVisible();
+	await saveUnsavedChanges(page);
 
 	await page.reload();
 

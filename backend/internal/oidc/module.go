@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/italypaleale/francis/host/local"
-	"github.com/lestrrat-go/jwx/v3/jwa"
+	francishost "github.com/italypaleale/francis/host"
+	"github.com/lestrrat-go/jwx/v4/jwa"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"gorm.io/gorm"
@@ -42,7 +42,7 @@ type AuditLogger interface {
 
 type Dependencies struct {
 	DB         *gorm.DB
-	Actors     *local.Host
+	Actors     francishost.Host
 	Config     Config
 	HTTPClient *http.Client
 

@@ -14,12 +14,12 @@ import (
 type User struct {
 	Base
 
-	Username      string  `sortable:"true"`
-	Email         *string `sortable:"true"`
+	Username      string  `sortable:"case-insensitive"`
+	Email         *string `sortable:"case-insensitive"`
 	EmailVerified bool    `sortable:"true" filterable:"true"`
-	FirstName     string  `sortable:"true"`
-	LastName      string  `sortable:"true"`
-	DisplayName   string  `sortable:"true"`
+	FirstName     string  `sortable:"case-insensitive"`
+	LastName      string  `sortable:"case-insensitive"`
+	DisplayName   string  `sortable:"case-insensitive"`
 	IsAdmin       bool    `sortable:"true" filterable:"true"`
 	Locale        *string
 	LdapID        *string
@@ -91,10 +91,11 @@ func (u User) FullName() string {
 func (u User) Initials() string {
 	first := utils.GetFirstCharacter(u.FirstName)
 	last := utils.GetFirstCharacter(u.LastName)
-	if first == "" && last == "" && len(u.Username) >= 2 {
-		return strings.ToUpper(u.Username[:2])
+	if first != "" || last != "" {
+		return strings.ToUpper(first + last)
 	}
-	return strings.ToUpper(first + last)
+
+	return strings.ToUpper(utils.GetFirstCharacter(u.Username))
 }
 
 func (u User) LastModified() time.Time {
