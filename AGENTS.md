@@ -19,8 +19,8 @@ golangci-lint run  # lint (config: backend/.golangci.yml - includes build tags)
 
 # frontend/  (or root)
 pnpm check        # svelte-check — the ONLY frontend type gate (no unit tests exist)
-pnpm lint         # prettier --check && eslint  (note: not enforced by CI)
-pnpm format       # prettier --write — REQUIRED before opening a PR
+pnpm lint         # vp check — oxlint + oxfmt check via Vite+ (note: not enforced by CI)
+pnpm format       # vp fmt — REQUIRED before opening a PR
 ```
 
 End-to-end (needs Docker; **stop any local backend on `:1411` first** — see gotchas):
@@ -54,10 +54,9 @@ cd ../.. && pnpm test                            # = playwright test in tests/
 ## Frontend (SvelteKit)
 
 - **Svelte 5 runes only:** `$state`, `$derived`, `$props`, `$bindable`. No `export let`. Event
-  modifiers are gone — use `preventDefault` from `$lib/utils/event-util` (`onsubmit={preventDefault(fn)}`).
-- **Forms:** use the custom `createForm(schema, initial)` from `$lib/utils/form-util.ts` with
-  `form-input.svelte`. The vendored shadcn formsnap/superforms wrappers exist but app forms don't
-  use them — match the surrounding file. Import zod as `import { z } from 'zod/v4'`.
+  modifiers are gone — use `preventDefault` from `#lib/utils/event-util.ts` (`onsubmit={preventDefault(fn)}`).
+- **Forms:** use the custom `createForm(schema, initial)` from `#lib/utils/form-util.ts` with
+  `form-input.svelte` — match the surrounding file. Import zod as `import { z } from 'zod/v4'`.
 
 ## Coding Style Guidelines
 

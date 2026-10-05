@@ -23,7 +23,7 @@
 </script>
 
 <script lang="ts">
-	import { cn, type WithElementRef } from '$lib/utils/style.js';
+	import { cn, type WithElementRef } from '#lib/utils/style.js';
 	import { LucideX } from '@lucide/svelte';
 	import { onMount } from 'svelte';
 	import type { HTMLAttributes } from 'svelte/elements';
@@ -46,7 +46,7 @@
 
 	onMount(() => {
 		if (dismissibleId) {
-			const dismissedAlerts = JSON.parse(localStorage.getItem('dismissed-alerts') || '[]');
+			const dismissedAlerts = JSON.parse(localStorage?.getItem('dismissed-alerts') || '[]');
 			isVisible = !dismissedAlerts.includes(dismissibleId);
 		}
 	});
@@ -54,8 +54,11 @@
 	function dismiss() {
 		onDismiss?.();
 		if (dismissibleId) {
-			const dismissedAlerts = JSON.parse(localStorage.getItem('dismissed-alerts') || '[]');
-			localStorage.setItem('dismissed-alerts', JSON.stringify([...dismissedAlerts, dismissibleId]));
+			const dismissedAlerts = JSON.parse(localStorage?.getItem('dismissed-alerts') || '[]');
+			localStorage?.setItem(
+				'dismissed-alerts',
+				JSON.stringify([...dismissedAlerts, dismissibleId])
+			);
 			isVisible = false;
 		}
 	}

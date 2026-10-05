@@ -1,29 +1,24 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { openConfirmDialog } from '$lib/components/confirm-dialog/';
-	import OneTimeLinkModal from '$lib/components/one-time-link-modal.svelte';
-	import AdvancedTable from '$lib/components/table/advanced-table.svelte';
-	import * as Avatar from '$lib/components/ui/avatar/index';
-	import { Badge } from '$lib/components/ui/badge/index';
-	import { m } from '$lib/paraglide/messages';
-	import UserService from '$lib/services/user-service';
-	import appConfigStore from '$lib/stores/application-configuration-store';
-	import userStore from '$lib/stores/user-store';
+	import { openConfirmDialog } from '#lib/components/confirm-dialog/index.ts';
+	import OneTimeLinkModal from '#lib/components/one-time-link-modal.svelte';
+	import AdvancedTable from '#lib/components/table/advanced-table.svelte';
+	import * as Avatar from '#lib/components/ui/avatar/index.ts';
+	import { Badge } from '#lib/components/ui/badge/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import UserService from '#lib/services/user-service.ts';
+	import appConfigStore from '#lib/stores/application-configuration-store.ts';
+	import userStore from '#lib/stores/user-store.ts';
 	import type {
 		AdvancedTableColumn,
 		CreateAdvancedTableActions
-	} from '$lib/types/advanced-table.type';
-	import type { User } from '$lib/types/user.type';
-	import { cachedProfilePicture } from '$lib/utils/cached-image-util';
-	import { axiosErrorToast } from '$lib/utils/error-util';
-	import {
-		LucideLink,
-		LucidePencil,
-		LucideTrash,
-		LucideUserCheck,
-		LucideUserX
-	} from '@lucide/svelte';
+	} from '#lib/types/advanced-table.type.ts';
+	import type { User } from '#lib/types/user.type.ts';
+	import { cachedProfilePicture } from '#lib/utils/cached-image-util.ts';
+	import { axiosErrorToast } from '#lib/utils/error-util.ts';
+	import { LucidePencil, LucideUserCheck, LucideUserX } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
+	import { deleteUserAction, loginCodeAction } from './user-actions';
 
 	let userIdToCreateOneTimeLink: string | null = $state(null);
 	let tableRef: AdvancedTable<User>;
@@ -32,29 +27,6 @@
 
 	export function refresh() {
 		return tableRef?.refresh();
-	}
-
-	async function deleteUser(user: User) {
-		openConfirmDialog({
-			title: m.delete_firstname_lastname({
-				firstName: user.firstName,
-				lastName: user.lastName ?? ''
-			}),
-			message: m.are_you_sure_you_want_to_delete_this_user(),
-			confirm: {
-				label: m.delete(),
-				destructive: true,
-				action: async () => {
-					try {
-						await userService.remove(user.id);
-						await refresh();
-						toast.success(m.user_deleted_successfully());
-					} catch (e) {
-						axiosErrorToast(e);
-					}
-				}
-			}
-		});
 	}
 
 	async function enableUser(user: User) {
@@ -137,11 +109,7 @@
 	];
 
 	const actions: CreateAdvancedTableActions<User> = (u) => [
-		{
-			label: m.login_code(),
-			icon: LucideLink,
-			onClick: (u) => (userIdToCreateOneTimeLink = u.id)
-		},
+		loginCodeAction((u) => (userIdToCreateOneTimeLink = u.id)),
 		{
 			label: m.edit(),
 			primary: true,
@@ -155,14 +123,7 @@
 			hidden: !!u.ldapId || $appConfigStore.ldapEnabled,
 			disabled: u.id === $userStore?.id
 		},
-		{
-			label: m.delete(),
-			icon: LucideTrash,
-			variant: 'danger',
-			onClick: (u) => deleteUser(u),
-			hidden: !!u.ldapId && !u.disabled,
-			disabled: u.id === $userStore?.id
-		}
+		deleteUserAction(u, refresh)
 	];
 </script>
 

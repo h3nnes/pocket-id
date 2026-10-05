@@ -14,6 +14,7 @@ export type AppConfig = {
 	accentColor: string;
 	requireUserEmail: boolean;
 	tracingEnabled: boolean;
+	iconLibrary: 'default' | 'custom' | 'disabled';
 };
 
 export type AllAppConfig = AppConfig & {
@@ -58,6 +59,7 @@ export type AllAppConfig = AppConfig & {
 	webauthnAuthenticatorAttachment: 'any' | 'platform' | 'cross-platform';
 	// OIDC
 	cimdUrlAllowlist: string[];
+	autoCreateOidcClientSecret: boolean;
 };
 
 export type AppConfigRawResponse = {

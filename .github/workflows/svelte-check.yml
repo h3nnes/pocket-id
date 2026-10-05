@@ -8,7 +8,7 @@ on:
       - ".github/svelte-check-matcher.json"
       - "frontend/package.json"
       - "frontend/tsconfig.json"
-      - "frontend/svelte.config.js"
+      - "frontend/vite.config.ts"
   pull_request:
     branches: [main, breaking/**]
     paths:
@@ -16,7 +16,7 @@ on:
       - ".github/svelte-check-matcher.json"
       - "frontend/package.json"
       - "frontend/tsconfig.json"
-      - "frontend/svelte.config.js"
+      - "frontend/vite.config.ts"
   workflow_dispatch:
 
 permissions:
@@ -33,27 +33,23 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6.5.0
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@3754dd7dbdb32bd8f6d28b6043de13ad3a75f21f # v1.21.1
         with:
-          node-version: 24
-          cache: "pnpm"
+          node-version-file: .node-version
+          cache: true
+          run-install: false
 
       - name: Install dependencies
-        run: pnpm --filter pocket-id-frontend install --frozen-lockfile
+        run: vp -C frontend install --frozen-lockfile
 
       - name: Build Pocket ID Frontend
-        working-directory: frontend
-        run: pnpm --filter pocket-id-frontend build
+        run: vp -C frontend run build
 
       - name: Add svelte-check problem matcher
         run: echo "::add-matcher::.github/svelte-check-matcher.json"
 
       - name: Run svelte-check
-        working-directory: frontend
-        run: pnpm --filter pocket-id-frontend check
+        run: vp -C frontend run check

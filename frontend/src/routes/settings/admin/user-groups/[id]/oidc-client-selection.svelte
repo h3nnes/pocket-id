@@ -1,12 +1,12 @@
 <script lang="ts">
-	import ImageBox from '$lib/components/image-box.svelte';
-	import AdvancedTable from '$lib/components/table/advanced-table.svelte';
-	import { m } from '$lib/paraglide/messages';
-	import OidcService from '$lib/services/oidc-service';
-	import type { AdvancedTableColumn } from '$lib/types/advanced-table.type';
-	import type { ListRequestOptions } from '$lib/types/list-request.type';
-	import type { OidcClient, OidcClientWithAllowedGroups } from '$lib/types/oidc.type';
-	import { cachedOidcClientLogo } from '$lib/utils/cached-image-util';
+	import ImageBox from '#lib/components/image-box.svelte';
+	import AdvancedTable from '#lib/components/table/advanced-table.svelte';
+	import { m } from '#lib/paraglide/messages.js';
+	import OidcService from '#lib/services/oidc-service.ts';
+	import type { AdvancedTableColumn } from '#lib/types/advanced-table.type.ts';
+	import type { ListRequestOptions } from '#lib/types/list-request.type.ts';
+	import type { OidcClient, OidcClientWithAllowedGroups } from '#lib/types/oidc.type.ts';
+	import { cachedOidcClientLogo } from '#lib/utils/cached-image-util.ts';
 	import { mode } from 'mode-watcher';
 
 	let {
@@ -72,7 +72,7 @@
 </script>
 
 {#snippet LogoCell({ item }: { item: OidcClient })}
-	{#if item.hasLogo}
+	{#if item.hasLogo || item.hasDarkLogo}
 		<ImageBox
 			class="size-12 rounded-lg"
 			src={cachedOidcClientLogo.getUrl(item.id, isLightMode)}

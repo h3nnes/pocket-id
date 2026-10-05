@@ -1,89 +1,70 @@
 <script lang="ts">
-	import FormInput from '$lib/components/form/form-input.svelte';
-	import FormattedMessage from '$lib/components/formatted-message.svelte';
-	import SwitchWithLabel from '$lib/components/form/switch-with-label.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import { m } from '$lib/paraglide/messages';
+	import FormInput from '#lib/components/form/form-input.svelte';
+	import FormattedMessage from '#lib/components/formatted-message.svelte';
+	import * as Card from '#lib/components/ui/card/index.ts';
+	import * as Field from '#lib/components/ui/field/index.ts';
+	import { Switch } from '#lib/components/ui/switch/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import appConfigStore from '#lib/stores/application-configuration-store.ts';
 	import type {
 		OidcClient,
 		OidcClientCreateWithLogo,
-		OidcClientUpdateWithLogo
-	} from '$lib/types/oidc.type';
-	import { cachedOidcClientLogo } from '$lib/utils/cached-image-util';
-	import { axiosErrorToast } from '$lib/utils/error-util';
-	import { preventDefault } from '$lib/utils/event-util';
-	import { createForm } from '$lib/utils/form-util';
-	import { trackFormChanges } from '$lib/utils/unsaved-changes-util.svelte';
-	import { cn } from '$lib/utils/style';
-	import { callbackUrlSchema, emptyToUndefined, optionalUrl } from '$lib/utils/zod-util';
-	import { LucideChevronDown, LucideMoon, LucideSun } from '@lucide/svelte';
-	import { slide } from 'svelte/transition';
+		OidcClientLogoPreset
+	} from '#lib/types/oidc.type.ts';
+	import { cachedOidcClientLogo } from '#lib/utils/cached-image-util.ts';
+	import { axiosErrorToast } from '#lib/utils/error-util.ts';
+	import { preventDefault } from '#lib/utils/event-util.ts';
+	import { createForm, type FormInput as FormInputState } from '#lib/utils/form-util.ts';
+	import { trackFormChanges } from '#lib/utils/unsaved-changes-util.svelte.ts';
+	import { callbackUrlSchema, optionalUrl } from '#lib/utils/zod-util.ts';
 	import { z } from 'zod/v4';
 	import OidcCallbackUrlInput from './oidc-callback-url-input.svelte';
-	import OidcClientImageInput from './oidc-client-image-input.svelte';
+	import OidcClientLogoPicker from './oidc-client-logo-picker.svelte';
 
 	let {
 		callback,
-		existingClient,
-		mode
+		existingClient
 	}: {
-		existingClient?: OidcClient;
-		callback: (client: OidcClientCreateWithLogo | OidcClientUpdateWithLogo) => Promise<void>;
-		mode: 'create' | 'update';
+		existingClient: OidcClient;
+		callback: (client: OidcClientCreateWithLogo) => Promise<void>;
 	} = $props();
-	let isLoading = $state(false);
-	let showAdvancedOptions = $state(false);
 	let logo = $state<File | null | undefined>();
 	let darkLogo = $state<File | null | undefined>();
 	// What discarding restores the previews to; moves forward whenever a logo is saved.
-	let savedLogoDataURL = existingClient?.hasLogo
-		? cachedOidcClientLogo.getUrl(existingClient!.id)
+	let savedLogoDataURL = existingClient.hasLogo
+		? cachedOidcClientLogo.getUrl(existingClient.id)
 		: null;
-	let savedDarkLogoDataURL = existingClient?.hasDarkLogo
-		? cachedOidcClientLogo.getUrl(existingClient!.id, false)
+	let savedDarkLogoDataURL = existingClient.hasDarkLogo
+		? cachedOidcClientLogo.getUrl(existingClient.id, false)
 		: null;
 	let logoDataURL: string | null = $state(savedLogoDataURL);
 	let darkLogoDataURL: string | null = $state(savedDarkLogoDataURL);
-	const isCIMDClient = $derived(existingClient?.clientType === 'cimd');
-
-	// Defaults for new clients; existing clients keep the lifetimes edited in their own card.
-	const DEFAULT_ACCESS_TOKEN_DURATION_MINUTES = 60;
-	const DEFAULT_REFRESH_TOKEN_DURATION_MINUTES = 30 * 24 * 60;
+	const isCIMDClient = $derived(existingClient.clientType === 'cimd');
 
 	const client = {
-		id: '',
-		name: existingClient?.name || '',
-		description: existingClient?.description || '',
-		callbackURLs: existingClient?.callbackURLs || [],
-		logoutCallbackURLs: existingClient?.logoutCallbackURLs || [],
-		isPublic: existingClient?.isPublic || false,
-		pkceEnabled: existingClient?.pkceEnabled || false,
-		requiresReauthentication: existingClient?.requiresReauthentication || false,
+		name: existingClient.name || '',
+		description: existingClient.description || '',
+		callbackURLs: existingClient.callbackURLs || [],
+		logoutCallbackURLs: existingClient.logoutCallbackURLs || [],
+		backchannelLogoutURL: existingClient.backchannelLogoutURL || '',
+		isPublic: existingClient.isPublic || false,
+		pkceEnabled: existingClient.pkceEnabled || false,
+		requiresReauthentication: existingClient.requiresReauthentication || false,
 		requiresPushedAuthorizationRequests:
-			existingClient?.requiresPushedAuthorizationRequests || false,
-		skipConsent: existingClient?.skipConsent || false,
-		launchURL: existingClient?.launchURL || '',
+			existingClient.requiresPushedAuthorizationRequests || false,
+		skipConsent: existingClient.skipConsent || false,
+		launchURL: existingClient.launchURL || '',
 		logoUrl: '',
 		darkLogoUrl: '',
-		pkceSupported: existingClient?.pkceSupported || false
+		pkceSupported: existingClient.pkceSupported || false
 	};
 
 	const formSchema = z.object({
-		id: emptyToUndefined(
-			z
-				.string()
-				.min(2)
-				.max(128)
-				.regex(/^[a-zA-Z0-9_-]+$/, {
-					message: m.invalid_client_id()
-				})
-				.optional()
-		),
 		name: z.string().min(2).max(50),
 		description: z.string().max(150),
 		callbackURLs: z.array(callbackUrlSchema).default([]),
 		logoutCallbackURLs: z.array(callbackUrlSchema).default([]),
+		backchannelLogoutURL: z.url().or(z.literal('')),
 		isPublic: z.boolean(),
 		pkceEnabled: z.boolean(),
 		requiresReauthentication: z.boolean(),
@@ -103,51 +84,37 @@
 	async function saveClient(data: z.infer<FormSchema>) {
 		await callback({
 			...data,
-			credentials: existingClient?.credentials ?? { federatedIdentities: [], secrets: [] },
+			credentials: existingClient.credentials ?? { federatedIdentities: [], secrets: [] },
 			logo: $inputs.logoUrl?.value ? undefined : logo,
 			logoUrl: $inputs.logoUrl?.value,
 			darkLogo: $inputs.darkLogoUrl?.value ? undefined : darkLogo,
 			darkLogoUrl: $inputs.darkLogoUrl?.value,
-			isGroupRestricted: existingClient?.isGroupRestricted ?? true,
-			// The token lifetimes are edited in their own card. The current values are sent along
-			// because the backend falls back to the defaults for missing ones.
-			accessTokenDurationMinutes:
-				existingClient?.accessTokenDurationMinutes ?? DEFAULT_ACCESS_TOKEN_DURATION_MINUTES,
-			refreshTokenDurationMinutes:
-				existingClient?.refreshTokenDurationMinutes ?? DEFAULT_REFRESH_TOKEN_DURATION_MINUTES
+			isGroupRestricted: existingClient.isGroupRestricted,
+			// The token lifetimes are edited in their own card, but the current values are sent along because the backend falls back to the defaults for missing ones
+			accessTokenDurationMinutes: existingClient.accessTokenDurationMinutes,
+			refreshTokenDurationMinutes: existingClient.refreshTokenDurationMinutes
 		});
 
 		const hasLogo = logo != null || !!$inputs.logoUrl?.value;
 		const hasDarkLogo = darkLogo != null || !!$inputs.darkLogoUrl?.value;
-		if (existingClient) {
-			if (hasLogo) {
-				logoDataURL = cachedOidcClientLogo.getUrl(existingClient.id);
-			}
-			if (hasDarkLogo) {
-				darkLogoDataURL = cachedOidcClientLogo.getUrl(existingClient.id, false);
-			}
-			savedLogoDataURL = logoDataURL;
-			savedDarkLogoDataURL = darkLogoDataURL;
-			// The uploaded file has been persisted, so it's no longer "pending" for dirty-tracking.
-			logo = undefined;
-			darkLogo = undefined;
-		} else {
-			formStore.reset();
+		if (hasLogo) {
+			logoDataURL = cachedOidcClientLogo.getUrl(existingClient.id);
 		}
+		if (hasDarkLogo) {
+			darkLogoDataURL = cachedOidcClientLogo.getUrl(existingClient.id, false);
+		}
+		savedLogoDataURL = logoDataURL;
+		savedDarkLogoDataURL = darkLogoDataURL;
+		// The uploaded file has been persisted, so it's no longer "pending" for dirty-tracking.
+		logo = undefined;
+		darkLogo = undefined;
 	}
 
-	// Create mode has its own Save button rather than going through the unsaved-changes bar.
+	// Submitting with the Enter key saves right away instead of going through the unsaved-changes bar
 	async function onSubmit() {
 		const data = formStore.validate();
 		if (!data) return;
-		isLoading = true;
-		try {
-			await saveClient(data);
-		} catch (e) {
-			axiosErrorToast(e);
-		} finally {
-			isLoading = false;
-		}
+		await saveClient(data).catch(axiosErrorToast);
 	}
 
 	function discardLogoChanges() {
@@ -157,12 +124,10 @@
 		darkLogoDataURL = savedDarkLogoDataURL;
 	}
 
-	if (mode === 'update') {
-		trackFormChanges(() => formStore, saveClient, {
-			dirty: () => logo !== undefined || darkLogo !== undefined,
-			discard: discardLogoChanges
-		});
-	}
+	trackFormChanges(() => formStore, saveClient, {
+		dirty: () => logo !== undefined || darkLogo !== undefined,
+		discard: discardLogoChanges
+	});
 
 	function onLogoChange(input: File | string | null, light: boolean = true) {
 		if (input == null) return;
@@ -187,6 +152,16 @@
 				darkLogoDataURL = URL.createObjectURL(input);
 			}
 			formStore.setValue(logoUrlKey, '');
+		}
+	}
+
+	// A preset fills both variants, and clears the dark logo when the icon has no dark variant so a stale one isn't kept
+	function selectPreset(preset: OidcClientLogoPreset) {
+		onLogoChange(preset.logoUrl, true);
+		if (preset.darkLogoUrl) {
+			onLogoChange(preset.darkLogoUrl, false);
+		} else {
+			resetLogo(false);
 		}
 	}
 
@@ -215,165 +190,197 @@
 	<FormattedMessage message={m.logout_callback_url_description} />
 {/snippet}
 
-<form onsubmit={preventDefault(onSubmit)}>
-	<div class="grid grid-cols-1 gap-x-3 gap-y-7 sm:flex-row md:grid-cols-2">
-		<FormInput
-			label={m.name()}
-			class="w-full"
-			description={m.client_name_description()}
-			bind:input={$inputs.name}
-			disabled={isCIMDClient}
-		/>
-		<FormInput
-			label={m.client_description()}
-			class="w-full"
-			description={m.client_description_description()}
-			bind:input={$inputs.description}
-		/>
-		<FormInput
-			label={m.client_launch_url()}
-			description={m.client_launch_url_description()}
-			class="w-full"
-			type="url"
-			bind:input={$inputs.launchURL}
-		/>
-		<OidcCallbackUrlInput
-			label={m.callback_urls()}
-			description={callbackUrlDescription}
-			class="w-full"
-			bind:callbackURLs={$inputs.callbackURLs.value}
-			bind:error={$inputs.callbackURLs.error}
-			disabled={isCIMDClient}
-		/>
-		<OidcCallbackUrlInput
-			label={m.logout_callback_urls()}
-			description={logoutCallbackUrlDescription}
-			class="w-full"
-			bind:callbackURLs={$inputs.logoutCallbackURLs.value}
-			bind:error={$inputs.logoutCallbackURLs.error}
-			disabled={isCIMDClient}
-		/>
-		<div>
-			<SwitchWithLabel
-				id="public-client"
-				label={m.public_client()}
-				description={m.public_clients_description()}
-				onCheckedChange={(v) => {
-					if (v) {
-						$inputs.pkceEnabled.value = true;
-					}
-				}}
-				bind:checked={$inputs.isPublic.value}
-				disabled={isCIMDClient}
-			/>
-		</div>
-		<div
-			class="rounded-lg transition-all duration-200"
-			class:[&_[data-switch-root]]:ring-2={pkcePromptNeeded}
-			class:[&_[data-switch-root]]:ring-blue-500={pkcePromptNeeded}
-		>
-			<SwitchWithLabel
-				id="pkce"
-				label={m.pkce()}
-				description={m.proof_key_code_exchange_is_a_security_feature_to_prevent_csrf_and_authorization_code_interception_attacks()}
-				disabled={isCIMDClient || $inputs.isPublic.value}
-				bind:checked={$inputs.pkceEnabled.value}
-			/>
-		</div>
-		<SwitchWithLabel
-			id="requires-reauthentication"
-			label={m.requires_reauthentication()}
-			description={m.requires_users_to_authenticate_again_on_each_authorization()}
-			bind:checked={$inputs.requiresReauthentication.value}
-		/>
-		<SwitchWithLabel
-			id="skip-consent"
-			label={m.skip_consent()}
-			description={m.skip_consent_description()}
-			bind:checked={$inputs.skipConsent.value}
-		/>
-	</div>
-	<div class="mt-7 w-full md:w-1/2">
-		<Tabs.Root value="light-logo">
-			<Tabs.Content value="light-logo">
-				<OidcClientImageInput
-					{logoDataURL}
-					resetLogo={() => resetLogo(true)}
-					clientName={$inputs.name.value}
-					light={true}
-					onLogoChange={(input) => onLogoChange(input, true)}
-				>
-					{#snippet tabTriggers()}
-						<Tabs.List class="grid h-8 w-full grid-cols-2">
-							<Tabs.Trigger value="light-logo" class="px-3">
-								<LucideSun class="size-4" />
-							</Tabs.Trigger>
-							<Tabs.Trigger value="dark-logo" class="px-3">
-								<LucideMoon class="size-4" />
-							</Tabs.Trigger>
-						</Tabs.List>
-					{/snippet}
-				</OidcClientImageInput>
-			</Tabs.Content>
-			<Tabs.Content value="dark-logo">
-				<OidcClientImageInput
-					light={false}
-					logoDataURL={darkLogoDataURL}
-					resetLogo={() => resetLogo(false)}
-					clientName={$inputs.name.value}
-					onLogoChange={(input) => onLogoChange(input, false)}
-				>
-					{#snippet tabTriggers()}
-						<Tabs.List class="grid h-8 w-full grid-cols-2">
-							<Tabs.Trigger value="light-logo" class="px-3">
-								<LucideSun class="size-4" />
-							</Tabs.Trigger>
-							<Tabs.Trigger value="dark-logo" class="px-3">
-								<LucideMoon class="size-4" />
-							</Tabs.Trigger>
-						</Tabs.List>
-					{/snippet}
-				</OidcClientImageInput>
-			</Tabs.Content>
-		</Tabs.Root>
-	</div>
+{#snippet switchField(
+	id: string,
+	label: string,
+	description: string,
+	input: FormInputState<boolean>,
+	disabled: boolean = false,
+	onCheckedChange?: (checked: boolean) => void
+)}
+	<Field.Field orientation="horizontal" data-disabled={disabled}>
+		<Field.Content>
+			<Field.Label for={id}>{label}</Field.Label>
+			<Field.Description>{description}</Field.Description>
+		</Field.Content>
+		<Switch {id} {disabled} {onCheckedChange} bind:checked={input.value} />
+	</Field.Field>
+{/snippet}
 
-	{#if showAdvancedOptions}
-		<div class="mt-7 flex flex-col gap-y-7 md:col-span-2" transition:slide={{ duration: 200 }}>
-			<SwitchWithLabel
-				id="requires-par"
-				label={m.requires_pushed_authorization_requests()}
-				description={m.requires_pushed_authorization_requests_description()}
-				bind:checked={$inputs.requiresPushedAuthorizationRequests.value}
-			/>
-			{#if mode == 'create'}
-				<FormInput
-					label={m.client_id()}
-					placeholder={m.generated()}
-					class="w-full md:w-1/2"
-					description={m.custom_client_id_description()}
-					bind:input={$inputs.id}
-				/>
-			{/if}
-		</div>
-	{/if}
+{#snippet publicClientField()}
+	{@render switchField(
+		'public-client',
+		m.public_client(),
+		m.public_clients_description(),
+		$inputs.isPublic,
+		isCIMDClient,
+		(checked) => {
+			if (checked) {
+				$inputs.pkceEnabled.value = true;
+			}
+		}
+	)}
+{/snippet}
 
-	<div class="relative mt-5 flex justify-center">
-		<Button
-			variant="ghost"
-			class="text-muted-foreground"
-			onclick={() => (showAdvancedOptions = !showAdvancedOptions)}
-		>
-			{showAdvancedOptions ? m.hide_advanced_options() : m.show_advanced_options()}
-			<LucideChevronDown
-				class={cn(
-					'size-5 transition-transform duration-200',
-					showAdvancedOptions && 'rotate-180 transform'
-				)}
-			/>
-		</Button>
-		{#if mode === 'create'}
-			<Button {isLoading} type="submit" class="absolute right-0">{m.save()}</Button>
-		{/if}
+{#snippet pkceField()}
+	<div
+		class="rounded-lg transition-all duration-200"
+		class:[&_[data-switch-root]]:ring-2={pkcePromptNeeded}
+		class:[&_[data-switch-root]]:ring-blue-500={pkcePromptNeeded}
+	>
+		{@render switchField(
+			'pkce',
+			m.pkce(),
+			m.proof_key_code_exchange_is_a_security_feature_to_prevent_csrf_and_authorization_code_interception_attacks(),
+			$inputs.pkceEnabled,
+			isCIMDClient || $inputs.isPublic.value
+		)}
 	</div>
+{/snippet}
+
+{#snippet reauthenticationField()}
+	{@render switchField(
+		'requires-reauthentication',
+		m.requires_reauthentication(),
+		m.requires_users_to_authenticate_again_on_each_authorization(),
+		$inputs.requiresReauthentication
+	)}
+{/snippet}
+
+{#snippet skipConsentField()}
+	{@render switchField(
+		'skip-consent',
+		m.skip_consent(),
+		m.skip_consent_description(),
+		$inputs.skipConsent
+	)}
+{/snippet}
+
+{#snippet parField()}
+	{@render switchField(
+		'requires-par',
+		m.requires_pushed_authorization_requests(),
+		m.requires_pushed_authorization_requests_description(),
+		$inputs.requiresPushedAuthorizationRequests
+	)}
+{/snippet}
+
+{#snippet callbackUrlsInput()}
+	<OidcCallbackUrlInput
+		label={m.callback_urls()}
+		description={callbackUrlDescription}
+		addLabel={m.add_callback_url()}
+		class="w-full"
+		bind:callbackURLs={$inputs.callbackURLs.value}
+		bind:error={$inputs.callbackURLs.error}
+		disabled={isCIMDClient}
+	/>
+{/snippet}
+
+{#snippet logoutCallbackUrlsInput()}
+	<OidcCallbackUrlInput
+		label={m.logout_callback_urls()}
+		description={logoutCallbackUrlDescription}
+		addLabel={m.add_logout_url()}
+		class="w-full"
+		bind:callbackURLs={$inputs.logoutCallbackURLs.value}
+		bind:error={$inputs.logoutCallbackURLs.error}
+		disabled={isCIMDClient}
+	/>
+{/snippet}
+
+{#snippet backchannelLogoutUrlInput()}
+	<FormInput
+		label={m.backchannel_logout_url()}
+		description={m.backchannel_logout_url_description()}
+		class="w-full"
+		type="url"
+		bind:input={$inputs.backchannelLogoutURL}
+		disabled={isCIMDClient}
+	/>
+{/snippet}
+
+{#snippet logoInput()}
+	<OidcClientLogoPicker
+		clientName={$inputs.name.value}
+		{logoDataURL}
+		{darkLogoDataURL}
+		iconLibrary={$appConfigStore.iconLibrary}
+		{onLogoChange}
+		onPresetSelect={selectPreset}
+		onReset={() => {
+			resetLogo(true);
+			resetLogo(false);
+		}}
+	/>
+{/snippet}
+
+<!-- The form is split into cards so that related settings are grouped together -->
+<form onsubmit={preventDefault(onSubmit)} class="flex flex-col gap-6">
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>{m.application()}</Card.Title>
+			<Card.Description>{m.oidc_client_application_description()}</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-7">
+			<!-- The logo, name and description form one block because together they are what users see on the consent screen -->
+			<div class="flex flex-col gap-7 sm:flex-row sm:gap-6">
+				<div class="shrink-0">
+					{@render logoInput()}
+				</div>
+				<div class="flex flex-1 flex-col gap-6">
+					<FormInput
+						label={m.name()}
+						class="w-full"
+						bind:input={$inputs.name}
+						disabled={isCIMDClient}
+					/>
+					<FormInput
+						label={m.client_description()}
+						class="w-full"
+						bind:input={$inputs.description}
+					/>
+				</div>
+			</div>
+			<FormInput
+				label={m.client_launch_url()}
+				description={m.client_launch_url_description()}
+				class="w-full"
+				type="url"
+				bind:input={$inputs.launchURL}
+			/>
+		</Card.Content>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>{m.redirects()}</Card.Title>
+			<Card.Description>{m.oidc_client_redirects_description()}</Card.Description>
+		</Card.Header>
+		<Card.Content class="flex flex-col gap-7">
+			{@render callbackUrlsInput()}
+			{@render logoutCallbackUrlsInput()}
+			{@render backchannelLogoutUrlInput()}
+		</Card.Content>
+	</Card.Root>
+
+	<Card.Root>
+		<Card.Header>
+			<Card.Title>{m.security()}</Card.Title>
+			<Card.Description>{m.oidc_client_security_description()}</Card.Description>
+		</Card.Header>
+		<Card.Content>
+			<Field.Group class="gap-6">
+				{@render publicClientField()}
+				<Field.Separator />
+				{@render pkceField()}
+				<Field.Separator />
+				{@render reauthenticationField()}
+				<Field.Separator />
+				{@render skipConsentField()}
+				<Field.Separator />
+				{@render parField()}
+			</Field.Group>
+		</Card.Content>
+	</Card.Root>
 </form>

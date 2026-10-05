@@ -1,4 +1,4 @@
-import type { Jwk } from '$lib/utils/jwk-util';
+import type { Jwk } from '#lib/utils/jwk-util.ts';
 import type { UserGroup, UserGroupMinimal } from './user-group.type';
 
 export type OidcClientType = 'standard' | 'cimd';
@@ -63,6 +63,7 @@ export type OidcDiscoveryConfiguration = {
 export type OidcClient = OidcClientMetaData & {
 	callbackURLs: string[];
 	logoutCallbackURLs: string[];
+	backchannelLogoutURL: string;
 	isPublic: boolean;
 	pkceEnabled: boolean;
 	requiresReauthentication: boolean;
@@ -74,6 +75,10 @@ export type OidcClient = OidcClientMetaData & {
 	pkceSupported: boolean;
 	accessTokenDurationMinutes: number;
 	refreshTokenDurationMinutes: number;
+};
+
+export type OidcClientCreated = OidcClient & {
+	createdSecret?: OidcClientSecretCreated;
 };
 
 export type OidcClientTokenLifetimes = Pick<
@@ -106,6 +111,13 @@ export type OidcClientCreateWithLogo = OidcClientCreate & {
 	logoUrl?: string;
 	darkLogo?: File | null;
 	darkLogoUrl?: string;
+};
+
+export type OidcClientLogoPreset = {
+	name: string;
+	reference: string;
+	logoUrl: string;
+	darkLogoUrl: string | null;
 };
 
 export type OidcDeviceCodeInfo = {

@@ -1,9 +1,8 @@
 <script lang="ts">
-	import { replaceState } from '$app/navigation';
+	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { cn } from '$lib/utils/style.js';
+	import { cn } from '#lib/utils/style.js';
 	import { Tabs as TabsPrimitive } from 'bits-ui';
-	import { onMount } from 'svelte';
 
 	let {
 		ref = $bindable(null),
@@ -15,15 +14,20 @@
 		useHash?: boolean;
 	} = $props();
 
-	onMount(() => {
+	// Follows the hash on load and on later hash changes, so that links like `#credentials` elsewhere on the page can switch the tab
+	$effect(() => {
 		if (useHash && page.url.hash) {
 			value = page.url.hash.substring(1);
 		}
 	});
 
-	function onTabChange(newValue: string) {
+	async function onTabChange(newValue: string) {
 		if (useHash && page.url.hash.substring(1) !== newValue) {
-			replaceState(location.pathname + location.search + `#${newValue}`, page.state);
+			await goto(location.pathname + location.search + `#${newValue}`, {
+				shallow: true,
+				replace: true,
+				state: page.state
+			});
 		}
 	}
 </script>
@@ -33,6 +37,6 @@
 	bind:value
 	onValueChange={onTabChange}
 	data-slot="tabs"
-	class={cn('gap-2 group/tabs flex data-[orientation=horizontal]:flex-col', className)}
+	class={cn('group/tabs flex gap-2 data-[orientation=horizontal]:flex-col', className)}
 	{...restProps}
 />

@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { Badge } from '$lib/components/ui/badge/index.js';
-	import { Button } from '$lib/components/ui/button/index.js';
-	import * as Command from '$lib/components/ui/command/index.js';
-	import * as Popover from '$lib/components/ui/popover/index.js';
-	import { Separator } from '$lib/components/ui/separator/index.js';
-	import { m } from '$lib/paraglide/messages';
-	import { cn } from '$lib/utils/style';
+	import { Badge } from '#lib/components/ui/badge/index.js';
+	import { Button } from '#lib/components/ui/button/index.js';
+	import * as Command from '#lib/components/ui/command/index.js';
+	import * as Popover from '#lib/components/ui/popover/index.js';
+	import { Separator } from '#lib/components/ui/separator/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import { cn } from '#lib/utils/style.ts';
 	import CheckIcon from '@lucide/svelte/icons/check';
 	import ListFilterIcon from '@lucide/svelte/icons/list-filter';
 	import type { Component } from 'svelte';
@@ -41,7 +41,7 @@
 				class="order-dashed"
 				data-testid={`facet-${title.toLowerCase()}-trigger`}
 			>
-				<span class="flex gap-2 items-center">
+				<span class="flex items-center gap-2">
 					<ListFilterIcon />
 					{title}
 				</span>

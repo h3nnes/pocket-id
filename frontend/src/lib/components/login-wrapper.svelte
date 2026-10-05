@@ -5,10 +5,10 @@
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
 	import { page } from '$app/state';
-	import { m } from '$lib/paraglide/messages';
-	import appConfigStore from '$lib/stores/application-configuration-store';
-	import { cachedBackgroundImage } from '$lib/utils/cached-image-util';
-	import { cn } from '$lib/utils/style';
+	import { m } from '#lib/paraglide/messages.js';
+	import appConfigStore from '#lib/stores/application-configuration-store.ts';
+	import { cachedBackgroundImage } from '#lib/utils/cached-image-util.ts';
+	import { cn } from '#lib/utils/style.ts';
 	import { onMount, type Snippet } from 'svelte';
 	import { MediaQuery } from 'svelte/reactivity';
 	import { fade } from 'svelte/transition';
@@ -34,6 +34,7 @@
 	});
 
 	afterNavigate((e) => {
+		if (e.shallow) return;
 		isInitialLoad = !e?.from?.url;
 	});
 
@@ -57,7 +58,7 @@
 			: 'justify-center'}"
 	>
 		<div
-			class="relative z-10 flex h-full w-full max-w-[650px] 2xl:max-w-[800px] p-16 {cn(
+			class="relative z-10 flex h-full w-full max-w-[650px] p-16 2xl:max-w-[800px] {cn(
 				showAlternativeSignInMethodButton && 'pb-0'
 			)}"
 		>
@@ -87,7 +88,7 @@
 					src={cachedBackgroundImage.getUrl()}
 					class="{cn(
 						animate && 'animate-bg-zoom'
-					)} h-screen object-cover w-[calc(100vw-650px)] 2xl:w-[calc(100vw-800px)]"
+					)} h-screen w-[calc(100vw-650px)] object-cover 2xl:w-[calc(100vw-800px)]"
 					alt={m.login_background()}
 				/>
 			</div>
@@ -101,7 +102,7 @@
 		<Card.Root
 			class={{
 				'mx-3 w-full max-w-md': true,
-				'bg-transparent border-0': !backgroundImageExists
+				'border-0 bg-transparent': !backgroundImageExists
 			}}
 		>
 			<Card.CardContent

@@ -1,18 +1,18 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import CopyToClipboard from '$lib/components/copy-to-clipboard.svelte';
-	import SignInWrapper from '$lib/components/login-wrapper.svelte';
-	import Qrcode from '$lib/components/qrcode/qrcode.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import { Separator } from '$lib/components/ui/separator';
-	import { Spinner } from '$lib/components/ui/spinner';
-	import { m } from '$lib/paraglide/messages';
-	import DeviceLoginService from '$lib/services/device-login-service';
-	import userStore from '$lib/stores/user-store';
-	import type { DeviceLoginRequest } from '$lib/types/device-login.type';
-	import { getAxiosErrorMessage } from '$lib/utils/error-util';
+	import CopyToClipboard from '#lib/components/copy-to-clipboard.svelte';
+	import SignInWrapper from '#lib/components/login-wrapper.svelte';
+	import Qrcode from '#lib/components/qrcode/qrcode.svelte';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Card from '#lib/components/ui/card/index.ts';
+	import { Separator } from '#lib/components/ui/separator/index.ts';
+	import { Spinner } from '#lib/components/ui/spinner/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import DeviceLoginService from '#lib/services/device-login-service.ts';
+	import userStore from '#lib/stores/user-store.ts';
+	import type { DeviceLoginRequest } from '#lib/types/device-login.type.ts';
+	import { getAxiosErrorMessage } from '#lib/utils/error-util.ts';
 	import { isAxiosError } from 'axios';
 	import { mode } from 'mode-watcher';
 	import { onMount } from 'svelte';
@@ -164,11 +164,11 @@
 					<Separator class="flex-1" />
 				</div>
 				<div>
-					<p class="text-muted-foreground text-sm mb-2">
+					<p class="text-muted-foreground mb-2 text-sm">
 						{m.visit_and_enter({ url: request.verificationUri })}
 					</p>
 					<CopyToClipboard value={request.userCode}>
-						<p class="text-xl sm:text-2xl font-bold tracking-wider" data-testid="device-login-code">
+						<p class="text-xl font-bold tracking-wider sm:text-2xl" data-testid="device-login-code">
 							{request.userCode.substring(0, 4)}
 							<span class="text-muted-foreground font-normal">-</span>
 							{request.userCode.substring(4, 8)}
@@ -178,7 +178,7 @@
 			</Card.Content>
 		</Card.Root>
 	{/if}
-	<div class="flex mt-7 md:mt-15 gap-3 w-full max-w-112.5">
+	<div class="mt-7 flex w-full max-w-112.5 gap-3 md:mt-15">
 		<Button class="flex-1" href={'/login/alternative' + page.url.search} variant="secondary"
 			>{m.go_back()}</Button
 		>

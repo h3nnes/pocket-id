@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import { m } from '$lib/paraglide/messages';
+	import * as Tabs from '#lib/components/ui/tabs/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
 
 	let { currentPage }: { currentPage: 'personal' | 'global' } = $props();
 </script>
 
-<div class="no-fade flex justify-end">
+<div class="flex justify-end">
 	<Tabs.Root value={currentPage}>
 		<Tabs.List>
 			<Tabs.Trigger onclick={() => goto('/settings/audit-log')} value="personal"

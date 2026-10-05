@@ -1,19 +1,19 @@
 <script lang="ts">
-	import { openConfirmDialog } from '$lib/components/confirm-dialog';
-	import { Button } from '$lib/components/ui/button';
-	import * as Empty from '$lib/components/ui/empty';
-	import * as Pagination from '$lib/components/ui/pagination';
-	import { Separator } from '$lib/components/ui/separator';
-	import { m } from '$lib/paraglide/messages';
-	import OIDCService from '$lib/services/oidc-service';
-	import type { ListRequestOptions, Paginated } from '$lib/types/list-request.type';
+	import { openConfirmDialog } from '#lib/components/confirm-dialog/index.ts';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Empty from '#lib/components/ui/empty/index.ts';
+	import * as Pagination from '#lib/components/ui/pagination/index.ts';
+	import { Separator } from '#lib/components/ui/separator/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import OIDCService from '#lib/services/oidc-service.ts';
+	import type { ListRequestOptions, Paginated } from '#lib/types/list-request.type.ts';
 	import type {
 		AccessibleOidcClient,
 		AuthorizedOidcClient,
 		OidcClientMetaData
-	} from '$lib/types/oidc.type';
-	import { axiosErrorToast } from '$lib/utils/error-util';
-	import { cn } from '$lib/utils/style';
+	} from '#lib/types/oidc.type.ts';
+	import { axiosErrorToast } from '#lib/utils/error-util.ts';
+	import { cn } from '#lib/utils/style.ts';
 	import { ChevronDown, LayoutDashboard } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { slide } from 'svelte/transition';
@@ -95,7 +95,7 @@
 </svelte:head>
 <div>
 	<div>
-		<h1 class="flex items-center gap-2 text-2xl font-bold mb-5">
+		<h1 class="mb-5 flex items-center gap-2 text-2xl font-bold">
 			<LayoutDashboard class="text-primary/80 size-6" />
 			{m.my_apps()}
 		</h1>
@@ -137,7 +137,7 @@
 		{/if}
 
 		{#if clients.pagination.totalPages > 1}
-			<div class="flex items-center justify-center mt-5">
+			<div class="mt-5 flex items-center justify-center">
 				<Pagination.Root
 					class="mx-0 w-auto"
 					count={clients.pagination.totalItems}
@@ -190,7 +190,7 @@
 				</div>
 
 				{#if authorizedClientsWithoutLaunchURL.pagination.totalPages > 1}
-					<div class="flex items-center justify-center mt-5">
+					<div class="mt-5 flex items-center justify-center">
 						<Pagination.Root
 							class="mx-0 w-auto"
 							count={authorizedClientsWithoutLaunchURL.pagination.totalItems}
@@ -229,7 +229,7 @@
 	{/if}
 
 	{#if authorizedClientsWithoutLaunchURL.pagination.totalItems > 0 && clients.data.length !== 0}
-		<div class="flex justify-center mt-10">
+		<div class="mt-10 flex justify-center">
 			<Button
 				variant="ghost"
 				class="text-muted-foreground"

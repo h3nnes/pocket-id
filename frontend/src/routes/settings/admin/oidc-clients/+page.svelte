@@ -1,36 +1,33 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import { m } from '$lib/paraglide/messages';
-	import OIDCService from '$lib/services/oidc-service';
-	import appConfigStore from '$lib/stores/application-configuration-store';
-	import clientSecretStore from '$lib/stores/client-secret-store';
-	import type { OidcClientCreateWithLogo } from '$lib/types/oidc.type';
-	import { encodeClientIdParam } from '$lib/utils/client-id-util';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Card from '#lib/components/ui/card/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import OIDCService from '#lib/services/oidc-service.ts';
+	import appConfigStore from '#lib/stores/application-configuration-store.ts';
+	import clientSecretStore from '#lib/stores/client-secret-store.ts';
+	import type { OidcClientCreate } from '#lib/types/oidc.type.ts';
+	import { encodeClientIdParam } from '#lib/utils/client-id-util.ts';
 	import { LucideMinus, ShieldCheck, ShieldPlus } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { slide } from 'svelte/transition';
-	import OIDCClientForm from './oidc-client-form.svelte';
+	import OidcClientCreateForm from './oidc-client-create-form.svelte';
 	import OIDCClientList from './oidc-client-list.svelte';
 
 	let expandAddClient = $state(false);
 
 	const oidcService = new OIDCService();
 
-	async function createOIDCClient(client: OidcClientCreateWithLogo) {
+	async function createOIDCClient(client: OidcClientCreate) {
 		clientSecretStore.clear();
 		const createdClient = await oidcService.createClient(client);
+		if (createdClient.createdSecret) {
+			clientSecretStore.setAutoCreated(
+				createdClient.createdSecret.id,
+				createdClient.createdSecret.secret
+			);
+		}
 
-		const logoPromise = client.logo
-			? oidcService.updateClientLogo(createdClient, client.logo, true)
-			: Promise.resolve();
-		const darkLogoPromise = client.darkLogo
-			? oidcService.updateClientLogo(createdClient, client.darkLogo, false)
-			: Promise.resolve();
-		await Promise.all([logoPromise, darkLogoPromise]);
-
-		// A new client starts without any secret: the admin creates the ones they need from the credentials tab
 		goto(`/settings/admin/oidc-clients/${encodeClientIdParam(createdClient.id)}`);
 		toast.success(m.oidc_client_created_successfully());
 	}
@@ -43,7 +40,7 @@
 <div>
 	<Card.Root>
 		<Card.Header>
-			<div class="flex flex-wrap items-center justify-between md:flex-nowrap gap-4">
+			<div class="flex flex-wrap items-center justify-between gap-4 md:flex-nowrap">
 				<div>
 					<Card.Title>
 						<ShieldPlus class="text-primary/80 size-5" />
@@ -69,7 +66,7 @@
 		{#if expandAddClient}
 			<div transition:slide>
 				<Card.Content>
-					<OIDCClientForm mode="create" callback={createOIDCClient} />
+					<OidcClientCreateForm callback={createOIDCClient} />
 				</Card.Content>
 			</div>
 		{/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { m } from '$lib/paraglide/messages';
-	import { cn } from '$lib/utils/style';
+	import { m } from '#lib/paraglide/messages.js';
+	import { cn } from '#lib/utils/style.ts';
 	import { LucideChevronDown, type LucideIcon } from '@lucide/svelte';
 	import { onMount, type Snippet } from 'svelte';
 	import { slide } from 'svelte/transition';
@@ -30,14 +30,14 @@
 	let expanded = $state(defaultExpanded);
 
 	function loadExpandedState() {
-		const state = JSON.parse(localStorage.getItem('collapsible-cards-expanded') || '{}');
+		const state = JSON.parse(localStorage?.getItem('collapsible-cards-expanded') || '{}');
 		expanded = state[id] || false;
 	}
 
 	function saveExpandedState() {
-		const state = JSON.parse(localStorage.getItem('collapsible-cards-expanded') || '{}');
+		const state = JSON.parse(localStorage?.getItem('collapsible-cards-expanded') || '{}');
 		state[id] = expanded;
-		localStorage.setItem('collapsible-cards-expanded', JSON.stringify(state));
+		localStorage?.setItem('collapsible-cards-expanded', JSON.stringify(state));
 	}
 
 	function toggleExpanded() {

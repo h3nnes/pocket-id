@@ -1,23 +1,21 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { openConfirmDialog } from '$lib/components/confirm-dialog/';
-	import ImageBox from '$lib/components/image-box.svelte';
-	import AdvancedTable from '$lib/components/table/advanced-table.svelte';
-	import { ScrollArea } from '$lib/components/ui/scroll-area';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { m } from '$lib/paraglide/messages';
-	import OIDCService from '$lib/services/oidc-service';
+	import ImageBox from '#lib/components/image-box.svelte';
+	import AdvancedTable from '#lib/components/table/advanced-table.svelte';
+	import { ScrollArea } from '#lib/components/ui/scroll-area/index.ts';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import OIDCService from '#lib/services/oidc-service.ts';
 	import type {
 		AdvancedTableColumn,
 		CreateAdvancedTableActions
-	} from '$lib/types/advanced-table.type';
-	import type { OidcClient, OidcClientWithAllowedGroups } from '$lib/types/oidc.type';
-	import { cachedOidcClientLogo } from '$lib/utils/cached-image-util';
-	import { encodeClientIdParam } from '$lib/utils/client-id-util';
-	import { axiosErrorToast } from '$lib/utils/error-util';
-	import { LucidePencil, LucideRefreshCcw, LucideTrash } from '@lucide/svelte';
+	} from '#lib/types/advanced-table.type.ts';
+	import type { OidcClientWithAllowedGroups } from '#lib/types/oidc.type.ts';
+	import { cachedOidcClientLogo } from '#lib/utils/cached-image-util.ts';
+	import { encodeClientIdParam } from '#lib/utils/client-id-util.ts';
+	import { LucidePencil } from '@lucide/svelte';
 	import { mode } from 'mode-watcher';
-	import { toast } from 'svelte-sonner';
+	import { deleteClientAction, refreshClientAction } from './oidc-client-actions';
 
 	const oidcService = new OIDCService();
 	let tableRef: AdvancedTable<OidcClientWithAllowedGroups>;
@@ -102,49 +100,9 @@
 			icon: LucidePencil,
 			onClick: (client) => goto(`/settings/admin/oidc-clients/${encodeClientIdParam(client.id)}`)
 		},
-		{
-			label: m.refresh(),
-			icon: LucideRefreshCcw,
-			hidden: client.clientType !== 'cimd',
-			onClick: (client) => refreshClient(client)
-		},
-		{
-			label: m.delete(),
-			icon: LucideTrash,
-			variant: 'danger',
-			onClick: (client) => deleteClient(client)
-		}
+		refreshClientAction(client, refresh),
+		deleteClientAction(refresh)
 	];
-
-	async function refreshClient(client: OidcClient) {
-		try {
-			await oidcService.refreshClient(client.id);
-			await refresh();
-			toast.success(m.oidc_client_metadata_refreshed_successfully());
-		} catch (e) {
-			axiosErrorToast(e);
-		}
-	}
-
-	async function deleteClient(client: OidcClient) {
-		openConfirmDialog({
-			title: m.delete_name({ name: client.name }),
-			message: m.are_you_sure_you_want_to_delete_this_oidc_client(),
-			confirm: {
-				label: m.delete(),
-				destructive: true,
-				action: async () => {
-					try {
-						await oidcService.removeClient(client.id);
-						await refresh();
-						toast.success(m.oidc_client_deleted_successfully());
-					} catch (e) {
-						axiosErrorToast(e);
-					}
-				}
-			}
-		});
-	}
 </script>
 
 {#snippet AllowedGroupCountCell({ item }: { item: OidcClientWithAllowedGroups })}
@@ -176,7 +134,7 @@
 {/snippet}
 
 {#snippet LogoCell({ item }: { item: OidcClientWithAllowedGroups })}
-	{#if item.hasLogo}
+	{#if item.hasLogo || item.hasDarkLogo}
 		<ImageBox
 			class="size-12 rounded-lg"
 			src={cachedOidcClientLogo.getUrl(item.id, isLightMode)}

@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { Badge } from '$lib/components/ui/badge';
-	import { Button } from '$lib/components/ui/button';
-	import * as Command from '$lib/components/ui/command';
-	import * as Popover from '$lib/components/ui/popover';
-	import { Spinner } from '$lib/components/ui/spinner';
-	import { m } from '$lib/paraglide/messages';
-	import { cn } from '$lib/utils/style';
+	import { Badge } from '#lib/components/ui/badge/index.ts';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Command from '#lib/components/ui/command/index.ts';
+	import * as Popover from '#lib/components/ui/popover/index.ts';
+	import { Spinner } from '#lib/components/ui/spinner/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import { cn } from '#lib/utils/style.ts';
 	import { LucideCheck, LucideChevronDown } from '@lucide/svelte';
 	import type { FormEventHandler } from 'svelte/elements';
 
@@ -81,9 +81,9 @@
 				variant="outline"
 				role="combobox"
 				aria-expanded={open}
-				class="h-auto min-h-10 w-full bg-input/30!"
+				class="bg-input/30! h-auto min-h-10 w-full"
 			>
-				<div class="flex items-center justify-between w-full">
+				<div class="flex w-full items-center justify-between">
 					<div class="flex flex-wrap items-center gap-1">
 						{#if selectedItems.length > 0}
 							{#each selectedLabels as label, i (i)}

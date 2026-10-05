@@ -1,13 +1,14 @@
 <script lang="ts">
-	import * as Alert from '$lib/components/ui/alert';
-	import * as Card from '$lib/components/ui/card';
-	import * as Tabs from '$lib/components/ui/tabs';
-	import { m } from '$lib/paraglide/messages';
-	import AppConfigService from '$lib/services/app-config-service';
-	import appConfigStore from '$lib/stores/application-configuration-store';
-	import type { AllAppConfig } from '$lib/types/application-configuration.type';
+	import * as Alert from '#lib/components/ui/alert/index.ts';
+	import * as Card from '#lib/components/ui/card/index.ts';
+	import * as Tabs from '#lib/components/ui/tabs/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import AppConfigService from '#lib/services/app-config-service.ts';
+	import appConfigStore from '#lib/stores/application-configuration-store.ts';
+	import type { AllAppConfig } from '#lib/types/application-configuration.type.ts';
 	import { LucideInfo } from '@lucide/svelte';
 	import AppConfigDynamicClientsForm from './forms/app-config-dynamic-clients-form.svelte';
+	import AppConfigClientSecretsForm from './forms/app-config-client-secrets-form.svelte';
 	import AppConfigEmailForm from './forms/app-config-email-form.svelte';
 	import AppConfigGeneralForm from './forms/app-config-general-form.svelte';
 	import AppConfigLdapForm from './forms/app-config-ldap-form.svelte';
@@ -191,7 +192,16 @@
 		</Card.Root>
 	</Tabs.Content>
 
-	<Tabs.Content value="oidc" id="application-configuration-oidc">
+	<Tabs.Content value="oidc" id="application-configuration-oidc" class="flex flex-col gap-4">
+		<Card.Root>
+			<Card.Header>
+				<Card.Title>{m.general()}</Card.Title>
+			</Card.Header>
+			<Card.Content>
+				<AppConfigClientSecretsForm {appConfig} callback={updateAppConfig} />
+			</Card.Content>
+		</Card.Root>
+
 		<Card.Root>
 			<Card.Header>
 				<Card.Title>{m.client_id_metadata_documents()}</Card.Title>

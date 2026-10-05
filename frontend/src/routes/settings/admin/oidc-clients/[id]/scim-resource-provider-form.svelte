@@ -1,15 +1,15 @@
 <script lang="ts">
-	import { openConfirmDialog } from '$lib/components/confirm-dialog';
-	import FormInput from '$lib/components/form/form-input.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { m } from '$lib/paraglide/messages';
-	import ScimService from '$lib/services/scim-service';
-	import type { ScimServiceProvider, ScimServiceProviderCreate } from '$lib/types/scim.type';
-	import { axiosErrorToast } from '$lib/utils/error-util';
-	import { preventDefault } from '$lib/utils/event-util';
-	import { createForm } from '$lib/utils/form-util';
-	import { trackFormChanges } from '$lib/utils/unsaved-changes-util.svelte';
-	import { emptyToUndefined } from '$lib/utils/zod-util';
+	import { openConfirmDialog } from '#lib/components/confirm-dialog/index.ts';
+	import FormInput from '#lib/components/form/form-input.svelte';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import ScimService from '#lib/services/scim-service.ts';
+	import type { ScimServiceProvider, ScimServiceProviderCreate } from '#lib/types/scim.type.ts';
+	import { axiosErrorToast } from '#lib/utils/error-util.ts';
+	import { preventDefault } from '#lib/utils/event-util.ts';
+	import { createForm } from '#lib/utils/form-util.ts';
+	import { trackFormChanges } from '#lib/utils/unsaved-changes-util.svelte.ts';
+	import { emptyToUndefined } from '#lib/utils/zod-util.ts';
 	import { toast } from 'svelte-sonner';
 	import { z } from 'zod/v4';
 
@@ -151,12 +151,12 @@
 		</div>
 	</div>
 	<div
-		class="mt-5 flex items-end flex-col sm:flex-row {existingProvider
+		class="mt-5 flex flex-col items-end sm:flex-row {existingProvider
 			? 'justify-between'
 			: 'justify-end'} "
 	>
 		{#if existingProvider}
-			<p class="text-muted-foreground text-xs self-start sm:self-auto">
+			<p class="text-muted-foreground self-start text-xs sm:self-auto">
 				{m.last_successful_sync_at({
 					time: existingProvider.lastSyncedAt
 						? new Date(existingProvider.lastSyncedAt).toLocaleString()

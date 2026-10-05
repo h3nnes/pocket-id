@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { Button } from '$lib/components/ui/button';
-	import * as Item from '$lib/components/ui/item/index.js';
-	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
-	import { m } from '$lib/paraglide/messages';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.js';
+	import { m } from '#lib/paraglide/messages.js';
 	import { LucideCalendar, LucidePencil, LucideTrash, type LucideIcon } from '@lucide/svelte';
 
 	let {
@@ -35,7 +35,7 @@
 	const showProviderIcon = $derived(!!providerIconUrl && !iconFailed);
 </script>
 
-<Item.Root variant="transparent" class="hover:bg-muted transition-colors py-3 px-0 sm:px-4">
+<Item.Root variant="transparent" class="hover:bg-muted px-0 py-3 transition-colors sm:px-4">
 	<Item.Media class="bg-muted text-muted-foreground size-11 rounded-xl">
 		{#if showProviderIcon}
 			<img

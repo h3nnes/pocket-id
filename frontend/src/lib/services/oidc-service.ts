@@ -1,4 +1,4 @@
-import type { ListRequestOptions, Paginated } from '$lib/types/list-request.type';
+import type { ListRequestOptions, Paginated } from '#lib/types/list-request.type.ts';
 import type {
 	AccessibleOidcClient,
 	AuthorizedOidcClient,
@@ -7,6 +7,8 @@ import type {
 	InteractionStep,
 	OidcClient,
 	OidcClientCreate,
+	OidcClientCreated,
+	OidcClientLogoPreset,
 	OidcClientMetaData,
 	OidcClientSecret,
 	OidcClientSecretCreated,
@@ -14,10 +16,10 @@ import type {
 	OidcClientWithAllowedGroups,
 	OidcClientWithAllowedUserGroups,
 	OidcDeviceCodeInfo
-} from '$lib/types/oidc.type';
-import type { ScimServiceProvider } from '$lib/types/scim.type';
-import { cachedOidcClientLogo } from '$lib/utils/cached-image-util';
-import { encodeClientIdParam } from '$lib/utils/client-id-util';
+} from '#lib/types/oidc.type.ts';
+import type { ScimServiceProvider } from '#lib/types/scim.type.ts';
+import { cachedOidcClientLogo } from '#lib/utils/cached-image-util.ts';
+import { encodeClientIdParam } from '#lib/utils/client-id-util.ts';
 import APIService from './api-service';
 
 class OidcService extends APIService {
@@ -42,7 +44,7 @@ class OidcService extends APIService {
 	};
 
 	createClient = async (client: OidcClientCreate) =>
-		(await this.api.post('/oidc/clients', client)).data as OidcClient;
+		(await this.api.post('/oidc/clients', client)).data as OidcClientCreated;
 
 	removeClient = async (id: string) => {
 		await this.api.delete(`/oidc/clients/${encodeClientIdParam(id)}`);
@@ -80,14 +82,21 @@ class OidcService extends APIService {
 		await this.api.post(`/oidc/clients/${encodeClientIdParam(client.id)}/logo`, formData, {
 			params: { light }
 		});
-		cachedOidcClientLogo.bustCache(client.id, light);
+		cachedOidcClientLogo.bustCache(client.id);
 	};
 
 	removeClientLogo = async (id: string, light: boolean = true) => {
 		await this.api.delete(`/oidc/clients/${encodeClientIdParam(id)}/logo`, {
 			params: { light }
 		});
-		cachedOidcClientLogo.bustCache(id, light);
+		cachedOidcClientLogo.bustCache(id);
+	};
+
+	searchLogoPresets = async (search: string) => {
+		const { data } = await this.api.get<OidcClientLogoPreset[]>('/oidc/logo-presets', {
+			params: { search }
+		});
+		return data;
 	};
 
 	listClientSecrets = async (id: string) =>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import * as Item from '$lib/components/ui/item/index.js';
+	import * as Item from '#lib/components/ui/item/index.js';
 	import type { LucideIcon } from '@lucide/svelte';
 
 	interface Props {
@@ -13,8 +13,8 @@
 	const SvelteComponent = $derived(icon);
 </script>
 
-<Item.Root class="py-1.5 px-0">
-	<Item.Media class="bg-muted !self-center rounded-lg p-2 !translate-y-0 h-full">
+<Item.Root class="px-0 py-1.5">
+	<Item.Media class="bg-muted h-full !translate-y-0 !self-center rounded-lg p-2">
 		<SvelteComponent class="size-5" />
 	</Item.Media>
 	<Item.Content class="text-start">

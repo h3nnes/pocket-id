@@ -13,6 +13,7 @@ async function configureOidcClient(page: Page) {
 		.fill(process.env.SCIM_SERVICE_PROVIDER_URL_INTERNAL || 'http://scim.provider/api');
 
 	await page.getByRole('button', { name: 'Enable' }).click();
+	await expect(page.locator('[data-type="success"]')).toHaveText('SCIM enabled successfully.');
 }
 
 async function syncScimServiceProvider(page: Page) {
@@ -129,7 +130,7 @@ test.describe('SCIM Sync', () => {
 	test('Remove allowed group and sync', async ({ page }) => {
 		await syncScimServiceProvider(page);
 
-		await page.getByRole('tab', { name: 'Allowed user groups' }).click();
+		await page.getByRole('tab', { name: 'Access', exact: true }).click();
 
 		const developersCheckbox = page
 			.getByRole('row', { name: userGroups.developers.name })
@@ -155,10 +156,10 @@ test.describe('SCIM Sync', () => {
 	test('Remove group restrictions and sync', async ({ page }) => {
 		await syncScimServiceProvider(page);
 
-		await page.getByRole('tab', { name: 'Allowed user groups' }).click();
+		await page.getByRole('tab', { name: 'Access', exact: true }).click();
 
-		await page.getByRole('button', { name: 'Unrestrict' }).click();
-		await page.getByRole('button', { name: 'Unrestrict' }).nth(1).click();
+		await page.getByRole('radio', { name: 'All users' }).click();
+		await page.getByRole('alertdialog').getByRole('button', { name: 'Unrestrict' }).click();
 		await expect(
 			page.getByText('User groups restriction updated successfully', { exact: true })
 		).toBeVisible();

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { HTMLAttributes } from 'svelte/elements';
-	import { cn, type WithElementRef, type WithoutChildren } from '$lib/utils/style.js';
+	import { cn, type WithElementRef, type WithoutChildren } from '#lib/utils/style.js';
 	import MoreHorizontalIcon from '@lucide/svelte/icons/more-horizontal';
 
 	let {
@@ -15,7 +15,7 @@
 	aria-hidden="true"
 	data-slot="pagination-ellipsis"
 	class={cn(
-		"size-9 items-center justify-center [&_svg:not([class*='size-'])]:size-4 flex items-center justify-center",
+		"flex size-9 items-center items-center justify-center justify-center [&_svg:not([class*='size-'])]:size-4",
 		className
 	)}
 	{...restProps}

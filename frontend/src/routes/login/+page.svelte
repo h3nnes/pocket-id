@@ -1,12 +1,12 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import SignInWrapper from '$lib/components/login-wrapper.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import { m } from '$lib/paraglide/messages';
-	import WebAuthnService from '$lib/services/webauthn-service';
-	import appConfigStore from '$lib/stores/application-configuration-store';
-	import userStore from '$lib/stores/user-store';
-	import { getWebauthnErrorMessage } from '$lib/utils/error-util';
+	import SignInWrapper from '#lib/components/login-wrapper.svelte';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import WebAuthnService from '#lib/services/webauthn-service.ts';
+	import appConfigStore from '#lib/stores/application-configuration-store.ts';
+	import userStore from '#lib/stores/user-store.ts';
+	import { getWebauthnErrorMessage } from '#lib/utils/error-util.ts';
 	import { startAuthentication } from '@simplewebauthn/browser';
 	import { fade } from 'svelte/transition';
 	import LoginLogoErrorSuccessIndicator from './components/login-logo-error-success-indicator.svelte';
@@ -27,7 +27,7 @@
 			const user = await webauthnService.finishLogin(authResponse);
 
 			await userStore.setUser(user);
-			goto(data.redirect || '/settings');
+			await goto(data.redirect || '/settings');
 		} catch (e) {
 			error = getWebauthnErrorMessage(e);
 		}
@@ -55,7 +55,7 @@
 			{m.authenticate_with_passkey_to_access_account()}
 		</p>
 	{/if}
-	<div class="mt-10 flex justify-center gap-3 w-full max-w-[450px]">
+	<div class="mt-10 flex w-full max-w-[450px] justify-center gap-3">
 		{#if $appConfigStore.allowUserSignups === 'open'}
 			<Button class="w-[50%]" variant="secondary" href="/signup">
 				{m.signup()}

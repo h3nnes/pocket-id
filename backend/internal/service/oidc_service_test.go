@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pocket-id/pocket-id/backend/internal/apperror"
+	"github.com/pocket-id/pocket-id/backend/internal/common"
 	"github.com/pocket-id/pocket-id/backend/internal/dto"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
 	datatype "github.com/pocket-id/pocket-id/backend/internal/model/types"
@@ -413,6 +414,41 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 		require.True(t, apperror.IsCode(err, apperror.CodeValidationFailed))
 	})
 
+	t.Run("Allows private hosts inside the icon library only", func(t *testing.T) {
+		const iconLibraryURL = "http://127.0.0.1:4050/icons"
+		originalIconLibraryURL := common.EnvConfig.IconLibraryURL
+		common.EnvConfig.IconLibraryURL = iconLibraryURL
+		t.Cleanup(func() {
+			common.EnvConfig.IconLibraryURL = originalIconLibraryURL
+		})
+
+		//nolint:bodyclose
+		svgResponse := testutils.NewMockResponse(http.StatusOK, `<svg xmlns="http://www.w3.org/2000/svg"/>`)
+		svgResponse.Header.Set("Content-Type", "image/svg+xml")
+
+		s := &OidcService{
+			db:          db,
+			fileStorage: dbStorage,
+			httpClient: &http.Client{
+				Transport: &testutils.MockRoundTripper{
+					Responses: map[string]*http.Response{
+						iconLibraryURL + "/svg/nextcloud.svg": svgResponse,
+					},
+				},
+			},
+		}
+
+		// The operator configured the library, so its loopback address is trusted
+		err := s.downloadAndSaveLogoFromURL(t.Context(), client.ID, iconLibraryURL+"/svg/nextcloud.svg", true)
+		require.NoError(t, err)
+		require.True(t, fileExists(t, "oidc-client-images/"+client.ID+".svg"))
+
+		// Other paths on the same private host are still blocked
+		err = s.downloadAndSaveLogoFromURL(t.Context(), client.ID, "http://127.0.0.1:4050/admin/logo.svg", true)
+		require.Error(t, err)
+		require.True(t, apperror.IsCode(err, apperror.CodeValidationFailed))
+	})
+
 	t.Run("Returns error for non-200 status code", func(t *testing.T) {
 		mockResponses := map[string]*http.Response{
 			//nolint:bodyclose
@@ -521,7 +557,7 @@ func TestOidcService_downloadAndSaveLogoFromURL(t *testing.T) {
 func TestOidcService_CreateClient_withDescription(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	description := "A test client description"
@@ -533,7 +569,7 @@ func TestOidcService_CreateClient_withDescription(t *testing.T) {
 		},
 	}
 
-	client, err := s.CreateClient(t.Context(), input, "user-id")
+	client, _, err := s.CreateClient(t.Context(), input, "user-id", true)
 	require.NoError(t, err)
 
 	var fetched model.OidcClient
@@ -546,7 +582,7 @@ func TestOidcService_CreateClient_withDescription(t *testing.T) {
 func TestOidcService_CreateClient_withoutDescription(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	input := dto.OidcClientCreateDto{
@@ -556,13 +592,55 @@ func TestOidcService_CreateClient_withoutDescription(t *testing.T) {
 		},
 	}
 
-	client, err := s.CreateClient(t.Context(), input, "user-id")
+	client, _, err := s.CreateClient(t.Context(), input, "user-id", true)
 	require.NoError(t, err)
 
 	var fetched model.OidcClient
 	err = db.First(&fetched, "id = ?", client.ID).Error
 	require.NoError(t, err)
 	assert.Empty(t, fetched.Description)
+}
+
+func TestOidcService_CreateClient_initialSecret(t *testing.T) {
+	for _, test := range []struct {
+		name             string
+		isPublic         bool
+		autoCreateSecret bool
+		wantSecret       bool
+	}{
+		{name: "confidential client gets a secret", autoCreateSecret: true, wantSecret: true},
+		{name: "automatic creation disabled", autoCreateSecret: false},
+		{name: "public client never gets a secret", isPublic: true, autoCreateSecret: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			db := testutils.NewDatabaseForTest(t)
+			s := &OidcService{db: db}
+			input := dto.OidcClientCreateDto{
+				OidcClientUpdateDto: dto.OidcClientUpdateDto{
+					Name:     "Test Client",
+					IsPublic: test.isPublic,
+				},
+			}
+
+			client, value, err := s.CreateClient(t.Context(), input, "user-id", test.autoCreateSecret)
+			require.NoError(t, err)
+
+			var fetched model.OidcClient
+			require.NoError(t, db.First(&fetched, "id = ?", client.ID).Error)
+			if !test.wantSecret {
+				assert.Empty(t, value)
+				assert.Empty(t, fetched.Credentials.Secrets)
+				return
+			}
+
+			require.Len(t, fetched.Credentials.Secrets, 1)
+			require.Len(t, client.Credentials.Secrets, 1)
+			assert.Len(t, value, 32)
+			assert.Equal(t, utils.CreateSha256Hash(value), fetched.Credentials.Secrets[0].Hash)
+			assert.Equal(t, value[:model.OidcClientSecretPrefixLength], fetched.Credentials.Secrets[0].Prefix)
+			assert.Nil(t, fetched.Credentials.Secrets[0].ExpiresAt)
+		})
+	}
 }
 
 func TestOidcService_CreateClient_tokenLifetimes(t *testing.T) {
@@ -595,7 +673,7 @@ func TestOidcService_CreateClient_tokenLifetimes(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			db := testutils.NewDatabaseForTest(t)
 
-			s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+			s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 			require.NoError(t, err)
 
 			input := dto.OidcClientCreateDto{
@@ -607,7 +685,7 @@ func TestOidcService_CreateClient_tokenLifetimes(t *testing.T) {
 				},
 			}
 
-			client, err := s.CreateClient(t.Context(), input, "user-id")
+			client, _, err := s.CreateClient(t.Context(), input, "user-id", true)
 			require.NoError(t, err)
 
 			var fetched model.OidcClient
@@ -622,7 +700,7 @@ func TestOidcService_CreateClient_tokenLifetimes(t *testing.T) {
 func TestOidcService_UpdateClient_tokenLifetimes(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{
@@ -659,7 +737,7 @@ func TestOidcService_UpdateClient_tokenLifetimes(t *testing.T) {
 func TestOidcService_CreateClientSecret_withCustomSecret(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{Name: "Test Client"}
@@ -688,7 +766,7 @@ func TestOidcService_CreateClientSecret_withCustomSecret(t *testing.T) {
 func TestOidcService_CreateClientSecret_multipleSecrets(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{Name: "Test Client"}
@@ -726,7 +804,7 @@ func TestOidcService_CreateClientSecret_multipleSecrets(t *testing.T) {
 func TestOidcService_CreateClientSecret_expirationInThePast(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{Name: "Test Client"}
@@ -741,7 +819,7 @@ func TestOidcService_CreateClientSecret_expirationInThePast(t *testing.T) {
 func TestOidcService_CreateClientSecret_limit(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{Name: "Test Client"}
@@ -760,7 +838,7 @@ func TestOidcService_CreateClientSecret_limit(t *testing.T) {
 func TestOidcService_CreateClientSecret_preservesFederatedIdentities(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{
@@ -796,7 +874,7 @@ func TestOidcService_CreateClientSecret_preservesFederatedIdentities(t *testing.
 func TestOidcService_UpdateClient_description(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Create a client without a description
@@ -837,7 +915,7 @@ func TestOidcService_UpdateClient_description(t *testing.T) {
 func TestOidcService_UpdateClient_CIMDPreservesMetadataFields(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{
@@ -906,7 +984,7 @@ func TestOidcService_UpdateClient_CIMDPreservesMetadataFields(t *testing.T) {
 func TestOidcService_UpdateClient_CIMDDoesNotOverwriteConcurrentMetadataRefresh(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	client := model.OidcClient{
@@ -939,7 +1017,7 @@ func TestOidcService_UpdateClient_CIMDDoesNotOverwriteConcurrentMetadataRefresh(
 
 func TestOidcService_ListAccessibleOidcClients_requiresExplicitGroupPermission(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	allowedGroup := model.UserGroup{Name: "allowed", FriendlyName: "Allowed"}
@@ -973,7 +1051,7 @@ func TestOidcService_ListAccessibleOidcClients_requiresExplicitGroupPermission(t
 
 func TestOidcService_ListClientViewsFilterByLaunchURLPresence(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
-	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil)
+	s, err := NewOidcService(db, nil, nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	user := model.User{Username: "launch-url-filter"}
@@ -1031,4 +1109,70 @@ func accessibleClientNames(clients []dto.AccessibleOidcClientDto) []string {
 		names[i] = clients[i].Name
 	}
 	return names
+}
+
+func TestOidcService_GetClientLogo(t *testing.T) {
+	db := testutils.NewDatabaseForTest(t)
+	dbStorage, err := storage.NewDatabaseStorage(db)
+	require.NoError(t, err)
+	s := &OidcService{db: db, fileStorage: dbStorage}
+
+	// createClient stores the given variants with their name as content, so the test can tell which one was served
+	createClient := func(t *testing.T, light, dark bool) string {
+		t.Helper()
+
+		client := model.OidcClient{Name: "Logo Client", CallbackURLs: datatype.StringList{"https://example.com/callback"}}
+		if light {
+			client.ImageType = new("png")
+		}
+		if dark {
+			client.DarkImageType = new("png")
+		}
+		require.NoError(t, db.Create(&client).Error)
+
+		if light {
+			require.NoError(t, dbStorage.Save(t.Context(), oidcClientImagePath(client.ID, "", "png"), strings.NewReader("light")))
+		}
+		if dark {
+			require.NoError(t, dbStorage.Save(t.Context(), oidcClientImagePath(client.ID, "-dark", "png"), strings.NewReader("dark")))
+		}
+		return client.ID
+	}
+
+	tests := []struct {
+		name      string
+		light     bool
+		dark      bool
+		wantLight string
+		wantDark  string
+	}{
+		{name: "serves each variant when both exist", light: true, dark: true, wantLight: "light", wantDark: "dark"},
+		{name: "dark mode falls back to the light logo", light: true, wantLight: "light", wantDark: "light"},
+		{name: "light mode falls back to the dark logo", dark: true, wantLight: "dark", wantDark: "dark"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clientID := createClient(t, tt.light, tt.dark)
+
+			for requestLight, want := range map[bool]string{true: tt.wantLight, false: tt.wantDark} {
+				reader, _, mimeType, err := s.GetClientLogo(t.Context(), clientID, requestLight)
+				require.NoError(t, err)
+				content, err := io.ReadAll(reader)
+				reader.Close()
+				require.NoError(t, err)
+				assert.Equal(t, want, string(content), "light=%t", requestLight)
+				assert.Equal(t, "image/png", mimeType)
+			}
+		})
+	}
+
+	t.Run("returns not found without any logo", func(t *testing.T) {
+		clientID := createClient(t, false, false)
+
+		for _, requestLight := range []bool{true, false} {
+			_, _, _, err := s.GetClientLogo(t.Context(), clientID, requestLight)
+			require.True(t, apperror.IsCode(err, apperror.CodeImageNotFound), "light=%t", requestLight)
+		}
+	})
 }

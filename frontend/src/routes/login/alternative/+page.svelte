@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import SignInWrapper from '$lib/components/login-wrapper.svelte';
-	import Logo from '$lib/components/logo.svelte';
-	import * as Item from '$lib/components/ui/item/index.js';
-	import { m } from '$lib/paraglide/messages';
-	import appConfigStore from '$lib/stores/application-configuration-store';
+	import SignInWrapper from '#lib/components/login-wrapper.svelte';
+	import Logo from '#lib/components/logo.svelte';
+	import * as Item from '#lib/components/ui/item/index.js';
+	import { m } from '#lib/paraglide/messages.js';
+	import appConfigStore from '#lib/stores/application-configuration-store.ts';
 	import {
 		LucideChevronRight,
 		LucideMail,
@@ -55,7 +55,7 @@
 				<Item.Root variant="outline" class="gap-5">
 					{#snippet child({ props })}
 						<a href={method.href + page.url.search} {...props}>
-							<Item.Media class="text-primary !self-center !translate-y-0">
+							<Item.Media class="text-primary !translate-y-0 !self-center">
 								<method.icon class="size-7" />
 							</Item.Media>
 							<Item.Content class="text-start">

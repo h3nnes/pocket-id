@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import { m } from '$lib/paraglide/messages';
-	import UserGroupService from '$lib/services/user-group-service';
-	import type { UserGroupCreate } from '$lib/types/user-group.type';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Card from '#lib/components/ui/card/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import UserGroupService from '#lib/services/user-group-service.ts';
+	import type { UserGroupCreate } from '#lib/types/user-group.type.ts';
 	import { LucideMinus, UserCog, UserPlus } from '@lucide/svelte';
 	import { toast } from 'svelte-sonner';
 	import { slide } from 'svelte/transition';
@@ -29,7 +29,7 @@
 <div>
 	<Card.Root>
 		<Card.Header>
-			<div class="flex flex-wrap items-center justify-between md:flex-nowrap gap-4">
+			<div class="flex flex-wrap items-center justify-between gap-4 md:flex-nowrap">
 				<div>
 					<Card.Title>
 						<UserPlus class="text-primary/80 size-5" />

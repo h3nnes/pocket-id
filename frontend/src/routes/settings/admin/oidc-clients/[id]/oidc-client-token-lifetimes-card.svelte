@@ -1,10 +1,10 @@
 <script lang="ts">
-	import DurationInput from '$lib/components/form/duration-input.svelte';
-	import * as Card from '$lib/components/ui/card';
-	import { m } from '$lib/paraglide/messages';
-	import type { OidcClient, OidcClientTokenLifetimes } from '$lib/types/oidc.type';
-	import { createForm } from '$lib/utils/form-util';
-	import { trackFormChanges } from '$lib/utils/unsaved-changes-util.svelte';
+	import DurationInput from '#lib/components/form/duration-input.svelte';
+	import * as Card from '#lib/components/ui/card/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import type { OidcClient, OidcClientTokenLifetimes } from '#lib/types/oidc.type.ts';
+	import { createForm } from '#lib/utils/form-util.ts';
+	import { trackFormChanges } from '#lib/utils/unsaved-changes-util.svelte.ts';
 	import { z } from 'zod/v4';
 
 	let {
@@ -41,7 +41,7 @@
 		<Card.Description>{m.token_lifetimes_description()}</Card.Description>
 	</Card.Header>
 	<Card.Content>
-		<div class="md:grid md:grid-cols-2 gap-10 space-y-5 md:space-y-0">
+		<div class="gap-10 space-y-5 md:grid md:grid-cols-2 md:space-y-0">
 			<DurationInput
 				id="access-token-lifetime"
 				label={m.access_token_lifetime()}

@@ -101,12 +101,24 @@ test('Delete an API', async ({ page }) => {
 	await expect(page.getByRole('row', { name: apis.orders.name })).not.toBeVisible();
 });
 
+test('Delete an API from the details page', async ({ page }) => {
+	await page.goto(`/settings/admin/apis/${apis.orders.id}`);
+
+	await page.getByRole('button', { name: 'Actions' }).click();
+	await page.getByRole('menuitem', { name: 'Delete' }).click();
+	await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+
+	await expect(page.locator('[data-type="success"]')).toHaveText('API deleted successfully');
+	await page.waitForURL((url) => url.pathname === '/settings/admin/apis');
+	await expect(page.getByRole('row', { name: apis.orders.name })).not.toBeVisible();
+});
+
 test('Grant a client user-delegated and client access to API permissions', async ({ page }) => {
 	// Nextcloud has no API access granted by default
 	await page.goto(`/settings/admin/oidc-clients/${oidcClients.nextcloud.id}`);
 
-	// Open the API access tab, where no API is listed yet, and add the Orders API
-	await page.getByRole('tab', { name: 'API access' }).click();
+	// Open the Access tab, where no API is listed yet, and add the Orders API
+	await page.getByRole('tab', { name: 'Access', exact: true }).click();
 	await expect(
 		page.getByText('This client has not been granted access to any API yet.')
 	).toBeVisible();
@@ -180,7 +192,7 @@ test('Grant a client access from the API details page', async ({ page }) => {
 
 	// The same grant shows up on the client's side of the relation
 	await page.goto(`/settings/admin/oidc-clients/${oidcClients.nextcloud.id}`);
-	await page.getByRole('tab', { name: 'API access' }).click();
+	await page.getByRole('tab', { name: 'Access', exact: true }).click();
 	await expect(page.getByRole('row', { name: apis.orders.name })).toContainText('1 / 2');
 });
 

@@ -1,16 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import ImageBox from '$lib/components/image-box.svelte';
-	import Logo from '$lib/components/logo.svelte';
-	import { Button } from '$lib/components/ui/button';
-	import * as Card from '$lib/components/ui/card';
-	import * as DropdownMenu from '$lib/components/ui/dropdown-menu';
-	import * as Tooltip from '$lib/components/ui/tooltip';
-	import { m } from '$lib/paraglide/messages';
-	import userStore from '$lib/stores/user-store';
-	import type { AccessibleOidcClient, OidcClientMetaData } from '$lib/types/oidc.type';
-	import { cachedOidcClientLogo } from '$lib/utils/cached-image-util';
-	import { encodeClientIdParam } from '$lib/utils/client-id-util';
+	import ImageBox from '#lib/components/image-box.svelte';
+	import Logo from '#lib/components/logo.svelte';
+	import { Button } from '#lib/components/ui/button/index.ts';
+	import * as Card from '#lib/components/ui/card/index.ts';
+	import * as DropdownMenu from '#lib/components/ui/dropdown-menu/index.ts';
+	import * as Tooltip from '#lib/components/ui/tooltip/index.ts';
+	import { m } from '#lib/paraglide/messages.js';
+	import userStore from '#lib/stores/user-store.ts';
+	import type { AccessibleOidcClient, OidcClientMetaData } from '#lib/types/oidc.type.ts';
+	import { cachedOidcClientLogo } from '#lib/utils/cached-image-util.ts';
+	import { encodeClientIdParam } from '#lib/utils/client-id-util.ts';
 	import {
 		LucideBan,
 		LucideEllipsisVertical,
@@ -40,7 +40,7 @@
 	<Card.Content class="p-0">
 		<div class="flex gap-3">
 			<div class="aspect-square h-[56px]">
-				{#if client.hasLogo}
+				{#if client.hasLogo || client.hasDarkLogo}
 					<ImageBox
 						class="size-14"
 						src={cachedOidcClientLogo.getUrl(client.id, isLightMode)}
@@ -70,7 +70,7 @@
 					{/if}
 					{#if client.description}
 						<p
-							class="text-muted-foreground line-clamp-3 wrap-break-word text-ellipsis text-xs mt-1"
+							class="text-muted-foreground mt-1 line-clamp-3 text-xs wrap-break-word text-ellipsis"
 						>
 							{client.description}
 						</p>
@@ -92,9 +92,7 @@
 									>
 								{/if}
 								{#if client.lastUsedAt}
-									<DropdownMenu.Item
-										class="text-red-500 focus:!text-red-700"
-										onclick={() => onRevoke(client)}
+									<DropdownMenu.Item variant="destructive" onclick={() => onRevoke(client)}
 										><LucideBan class="mr-2 size-4" />{m.revoke()}</DropdownMenu.Item
 									>
 								{/if}
@@ -110,7 +108,7 @@
 				<Tooltip.Provider>
 					<Tooltip.Root>
 						<Tooltip.Trigger>
-							<p class="text-muted-foreground flex items-center text-xs text-start">
+							<p class="text-muted-foreground flex items-center text-start text-xs">
 								<LucideLogIn class="mr-2 size-3" />
 								{formatDistanceToNow(client.lastUsedAt, { addSuffix: true })}
 							</p>
