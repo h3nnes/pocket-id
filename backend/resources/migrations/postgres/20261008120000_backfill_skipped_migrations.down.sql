@@ -1,0 +1,3 @@
+-- The skipped backfills performed here cannot be reversed safely
+-- Config, instance ids, and signup tokens frozen into kv would need to be split back into their original tables
+-- Dropping the description column would delete client descriptions that were set after the backfill

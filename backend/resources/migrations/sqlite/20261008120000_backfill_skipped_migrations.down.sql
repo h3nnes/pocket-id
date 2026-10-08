@@ -1,0 +1,3 @@
+-- The skipped backfills performed here cannot be reversed safely
+-- Config, instance ids, and signup tokens frozen into kv would need to be split back into their original tables
+-- Data normalized by the rebuilds keeps its values, so leaving the rebuilt shapes in place is the safest down behavior

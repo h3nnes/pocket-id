@@ -47,6 +47,15 @@ func NewDatabase(ctx context.Context) (db *gorm.DB, pg *pgxpool.Pool, err error)
 		return nil, nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
+	// Restore the oidc_clients description column on SQLite databases that skipped its migration
+	// The repair runs after migrations because golang-migrate ignores backdated migration files on databases that recorded a higher version
+	if common.EnvConfig.DbProvider == common.DbProviderSqlite {
+		err = utils.EnsureSqliteOidcClientDescriptionColumn(sqlDb)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to restore oidc_clients description column: %w", err)
+		}
+	}
+
 	return db, pg, nil
 }
 
