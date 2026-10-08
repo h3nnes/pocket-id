@@ -59,8 +59,8 @@ func MigrateDatabase(ctx context.Context, sqlDb *sql.DB) error {
 // EnsureSqliteOidcClientDescriptionColumn restores the description column on oidc_clients when its migration was skipped
 // golang-migrate silently ignores backdated migration files on databases that already recorded a higher version, so affected databases never received the column
 // SQLite cannot conditionally alter a table in pure SQL, so the existence check has to happen in code instead of in a migration file
-func EnsureSqliteOidcClientDescriptionColumn(db *sql.DB) error {
-	rows, err := db.Query("PRAGMA table_info(oidc_clients)")
+func EnsureSqliteOidcClientDescriptionColumn(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx, "PRAGMA table_info(oidc_clients)")
 	if err != nil {
 		return fmt.Errorf("failed to inspect oidc_clients columns: %w", err)
 	}
@@ -89,7 +89,7 @@ func EnsureSqliteOidcClientDescriptionColumn(db *sql.DB) error {
 
 	// The rebuild copies every existing column and only defaults the missing description, which cannot lose data because the column is known to be absent
 	// The column list matches the final oidc_clients shape: the secret column was already dropped and the backchannel logout column already added by earlier migrations
-	_, err = db.Exec(`
+	_, err = db.ExecContext(ctx, `
 PRAGMA foreign_keys = OFF;
 BEGIN;
 

@@ -69,7 +69,7 @@ func TestMigrateDatabaseFromScratchWithCompatMigrations(t *testing.T) {
 	}
 
 	// The description backfill for oidc_clients is a Go-side repair, so it must also succeed on a healthy database without touching anything
-	err = EnsureSqliteOidcClientDescriptionColumn(sqlDb)
+	err = EnsureSqliteOidcClientDescriptionColumn(context.Background(), sqlDb)
 	require.NoError(t, err)
 	assert.True(t, sqliteColumnExists(t, sqlDb, "oidc_clients", "description"), "expected the description column to exist")
 	assert.False(t, sqliteTableExists(t, sqlDb, "app_config_variables"), "expected app_config_variables to stay dropped on a fresh database")
@@ -136,7 +136,7 @@ func TestMigrateDatabaseRepairsSkippedMigrations(t *testing.T) {
 	err = MigrateDatabase(context.Background(), sqlDb)
 	require.NoError(t, err)
 
-	err = EnsureSqliteOidcClientDescriptionColumn(sqlDb)
+	err = EnsureSqliteOidcClientDescriptionColumn(context.Background(), sqlDb)
 	require.NoError(t, err)
 
 	// The description column is back and the seeded client survived with the defaulted description
@@ -183,7 +183,7 @@ func TestMigrateDatabaseRepairsSkippedMigrations(t *testing.T) {
 func sqliteTableExists(t *testing.T, db *sql.DB, table string) bool {
 	t.Helper()
 	var name string
-	err := db.QueryRow("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&name)
+	err := db.QueryRowContext(context.Background(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&name)
 	return err == nil
 }
 
@@ -196,7 +196,7 @@ func sqliteColumnExists(t *testing.T, db *sql.DB, table, column string) bool {
 // sqliteColumnType returns the declared type of the given column, or an empty string when the column does not exist
 func sqliteColumnType(t *testing.T, db *sql.DB, table, column string) string {
 	t.Helper()
-	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	rows, err := db.QueryContext(context.Background(), "PRAGMA table_info("+table+")")
 	require.NoError(t, err)
 	defer rows.Close()
 
@@ -218,7 +218,7 @@ func sqliteColumnType(t *testing.T, db *sql.DB, table, column string) string {
 func sqliteKvValue(t *testing.T, db *sql.DB, key string) string {
 	t.Helper()
 	var value string
-	err := db.QueryRow("SELECT \"value\" FROM kv WHERE \"key\" = ?", key).Scan(&value)
+	err := db.QueryRowContext(context.Background(), "SELECT \"value\" FROM kv WHERE \"key\" = ?", key).Scan(&value)
 	if err != nil {
 		return ""
 	}
