@@ -31,7 +31,7 @@ DROP TABLE signup_tokens;
 -- oauth2_sessions is intentionally NOT rebuilt here: later migrations already moved it to a newer shape, and rebuilding it at the old shape would lose columns
 
 CREATE TABLE reauthentication_tokens_new (
-    id TEXT PRIMARY KEY,
+    id TEXT NOT NULL PRIMARY KEY,
     created_at DATETIME NOT NULL,
     token TEXT NOT NULL UNIQUE,
     expires_at DATETIME NOT NULL,
