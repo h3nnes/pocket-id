@@ -16,13 +16,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/pocket-id/pocket-id/backend/internal/common"
-	sqliteutil "github.com/pocket-id/pocket-id/backend/internal/utils/sqlite"
 	"github.com/pocket-id/pocket-id/backend/resources"
 )
-
-func init() {
-	sqliteutil.RegisterSqliteFunctions()
-}
 
 // TestCompatMigrationFilesAreEmbedded verifies that the compatibility migration files for the old PKCE timestamp versions are present in the embedded filesystem
 // This directly reproduces the root cause of the startup failure: a database at version 20260726153901 could not find its migration file
@@ -129,14 +124,15 @@ func TestMigrateDatabaseRepairsSkippedMigrations(t *testing.T) {
 	_, err = sqlDb.ExecContext(t.Context(), "INSERT INTO oauth2_jtis (id, created_at, jti, expires_at) VALUES ('jt-1', 1700000000, 'jti-value-1', 1800000000)")
 	require.NoError(t, err)
 
-	// Rewind the recorded version so only the backfill migration runs again
+	// Rewind the recorded version so the pending migrations run again
 	_, err = sqlDb.ExecContext(t.Context(), "UPDATE schema_migrations SET version = 20260929120000, dirty = 0")
 	require.NoError(t, err)
 
-	err = MigrateDatabase(context.Background(), sqlDb)
+	// The description restore runs before migrations in production, because later migrations reference the column
+	err = EnsureSqliteOidcClientDescriptionColumn(context.Background(), sqlDb)
 	require.NoError(t, err)
 
-	err = EnsureSqliteOidcClientDescriptionColumn(context.Background(), sqlDb)
+	err = MigrateDatabase(context.Background(), sqlDb)
 	require.NoError(t, err)
 
 	// The description column is back and the seeded client survived with the defaulted description
