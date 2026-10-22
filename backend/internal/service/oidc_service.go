@@ -230,7 +230,7 @@ func (s *OidcService) UpdateClient(ctx context.Context, clientID string, input d
 	// CIMD clients skip Credentials on Save, so silently accepting a non-empty remapping list would be misleading
 	// Reject the request so an admin gets a clear error instead of a 200 followed by no persistence
 	if client.IsMetadataDocument() && len(input.Credentials.ClaimRemappings) > 0 {
-		return model.OidcClient{}, fmt.Errorf("claim remappings cannot be configured for clients backed by a metadata document")
+		return model.OidcClient{}, errors.New("claim remappings cannot be configured for clients backed by a metadata document")
 	}
 
 	err = updateOIDCClientModelFromDto(&client, &input)
