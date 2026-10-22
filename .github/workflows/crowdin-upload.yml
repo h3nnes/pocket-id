@@ -17,6 +17,9 @@ concurrency:
 
 jobs:
   upload:
+    # Disabled on forks: the upstream Crowdin project's CROWDIN_PERSONAL_TOKEN secret is not inherited by forks
+    # Re-enable by removing this guard after pointing crowdin.yml at your own project and adding the secret
+    if: github.repository == 'pocket-id/pocket-id'
     runs-on: ubuntu-latest
 
     steps:

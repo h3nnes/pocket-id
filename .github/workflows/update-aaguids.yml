@@ -10,6 +10,8 @@ permissions:
 
 jobs:
   update-aaguids:
+    # Disabled on forks: the bot app credentials (BOT_APP_CLIENT_ID / BOT_APP_PRIVATE_KEY) are not inherited by forks
+    if: github.repository == 'pocket-id/pocket-id'
     runs-on: ubuntu-latest
 
     steps:

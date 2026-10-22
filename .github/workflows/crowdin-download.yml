@@ -20,6 +20,9 @@ permissions:
 
 jobs:
   download:
+    # Disabled on forks: the upstream Crowdin project's CROWDIN_PERSONAL_TOKEN and the bot app credentials are not inherited by forks
+    # Re-enable by removing this guard after pointing crowdin.yml at your own project and adding the secrets
+    if: github.repository == 'pocket-id/pocket-id'
     runs-on: ubuntu-latest
     concurrency:
       group: crowdin-download
