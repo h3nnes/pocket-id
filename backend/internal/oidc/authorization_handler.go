@@ -7,10 +7,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ory/fosite"
+	"github.com/pocket-id/fosite"
+	"github.com/pocket-id/pocket-id/backend/internal/apperror"
+	"github.com/pocket-id/pocket-id/backend/internal/authz"
 	"github.com/pocket-id/pocket-id/backend/internal/httpserver"
 	"github.com/pocket-id/pocket-id/backend/internal/utils"
 	"github.com/pocket-id/pocket-id/backend/internal/utils/cookie"
@@ -35,10 +36,7 @@ func newAuthorizationHandler(
 
 func (h *authorizationHandler) authorize(c *gin.Context) {
 	ctx := c.Request.Context()
-	userID := c.GetString("userID")
-	authenticationMethod := c.GetString("authenticationMethod")
-	authenticationTime, _ := c.Get("authenticationTime")
-	typedAuthenticationTime, _ := authenticationTime.(time.Time)
+	principal := authz.PrincipalFrom(c)
 	reauthenticationToken, _ := c.Cookie(cookie.ReauthenticationTokenCookieName)
 
 	// A request that resumes an interaction only carries the interaction ID; the original
@@ -73,9 +71,9 @@ func (h *authorizationHandler) authorize(c *gin.Context) {
 	}
 
 	authorization, err := h.authorizationService.authorize(ctx, authorizeInput{
-		userID:                        userID,
-		authenticationMethod:          authenticationMethod,
-		authenticationTime:            typedAuthenticationTime,
+		userID:                        principal.UserID,
+		authenticationMethod:          principal.AuthenticationMethod,
+		authenticationTime:            principal.AuthenticationTime,
 		requester:                     ar,
 		hasPushedAuthorizationRequest: hasPushedAuthorizationRequest,
 		reauthenticationToken:         reauthenticationToken,
@@ -121,8 +119,7 @@ func (h *authorizationHandler) getInteractionSession(c *gin.Context) {
 
 func (h *authorizationHandler) completeInteraction(c *gin.Context) {
 	interactionID := c.Param("id")
-	authenticationTime, _ := c.Get("authenticationTime")
-	typedAuthenticationTime, _ := authenticationTime.(time.Time)
+	principal := authz.PrincipalFrom(c)
 
 	var request completeInteractionRequest
 	if err := httpserver.BindJSON(c, &request); err != nil {
@@ -131,13 +128,24 @@ func (h *authorizationHandler) completeInteraction(c *gin.Context) {
 	}
 
 	reauthenticationToken, _ := c.Cookie(cookie.ReauthenticationTokenCookieName)
-	response, err := h.authorizationService.completeInteractionStep(c.Request.Context(), interactionID, c.GetString("userID"), request.Step, reauthenticationToken, typedAuthenticationTime, requestMetaFromGin(c))
+	response, err := h.authorizationService.completeInteractionStep(c.Request.Context(), interactionID, principal.UserID, request.Step, request.Scopes, reauthenticationToken, principal.AuthenticationTime, requestMetaFromGin(c))
 	if err != nil {
 		_ = c.Error(err)
 		return
 	}
 
 	c.JSON(http.StatusOK, response)
+}
+
+// redirectAuthorizationErrors shows the errors of the authorization middleware, such as a disabled account or an unverified email, on the interaction error page
+// The middleware refuses these requests before the authorize handler runs, so its error is still unwritten when the chain returns here
+func (h *authorizationHandler) redirectAuthorizationErrors(c *gin.Context) {
+	c.Next()
+
+	if len(c.Errors) == 0 || c.Writer.Written() {
+		return
+	}
+	h.redirectToInteractionError(c, c.Errors.Last().Err)
 }
 
 func (h *authorizationHandler) writeAuthorizeError(ctx context.Context, c *gin.Context, ar fosite.AuthorizeRequester, err error) {
@@ -174,12 +182,14 @@ func (h *authorizationHandler) writeAuthorizeError(ctx context.Context, c *gin.C
 
 func (h *authorizationHandler) redirectToInteractionError(c *gin.Context, err error) {
 	errorMessage := "An unknown error occurred during the authorization request."
-	if err, ok := errors.AsType[*fosite.RFC6749Error](err); ok {
-		if err.HintField != "" {
-			errorMessage = err.HintField
-		} else if err.DescriptionField != "" {
-			errorMessage = err.DescriptionField
+	if rfcErr, ok := errors.AsType[*fosite.RFC6749Error](err); ok {
+		if rfcErr.HintField != "" {
+			errorMessage = rfcErr.HintField
+		} else if rfcErr.DescriptionField != "" {
+			errorMessage = rfcErr.DescriptionField
 		}
+	} else if appErr, ok := errors.AsType[*apperror.Error](err); ok {
+		errorMessage = appErr.ClientMessage()
 	}
 
 	query := url.Values{}

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/pocket-id/pocket-id/backend/internal/appconfig"
+	"github.com/pocket-id/pocket-id/backend/internal/authz"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
 	datatype "github.com/pocket-id/pocket-id/backend/internal/model/types"
 	testutils "github.com/pocket-id/pocket-id/backend/internal/utils/testing"
@@ -31,6 +33,58 @@ type authorizationPARTestCase struct {
 	multipart     bool
 	requestObject bool
 	malformed     bool
+}
+
+// fakeSessionAuthenticator signs every request in as a regular user, optionally one who still has to verify their email
+type fakeSessionAuthenticator struct {
+	unverified bool
+}
+
+func (fakeSessionAuthenticator) Kind() authz.PrincipalKind { return authz.KindSession }
+
+func (fakeSessionAuthenticator) Present(*gin.Context) bool { return true }
+
+func (a fakeSessionAuthenticator) Authenticate(*gin.Context) (*authz.Principal, error) {
+	principal := &authz.Principal{Kind: authz.KindSession, UserID: "test-user", Scopes: authz.UserScopes(false, authz.KindSession)}
+	if a.unverified {
+		principal.RestrictUnverified()
+	}
+	return principal, nil
+}
+
+// A browser that the authorization middleware refuses at the authorize endpoint must land on the interaction error page instead of a JSON error
+func TestAuthorizationHandlerRedirectsAuthorizationErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	handler := &authorizationHandler{}
+
+	serve := func(t *testing.T, authenticator authz.Authenticator) *httptest.ResponseRecorder {
+		t.Helper()
+
+		router := gin.New()
+		authz.NewMiddleware(authenticator).Router(router.Group("/")).Use(handler.redirectAuthorizationErrors).Optional().
+			GET("/authorize", authz.AccountAuthorize, func(c *gin.Context) { c.Status(http.StatusNoContent) })
+
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/authorize", nil))
+		return recorder
+	}
+
+	t.Run("redirects a user who still has to verify their email", func(t *testing.T) {
+		recorder := serve(t, fakeSessionAuthenticator{unverified: true})
+
+		require.Equal(t, http.StatusFound, recorder.Code)
+		location, err := url.Parse(recorder.Header().Get("Location"))
+		require.NoError(t, err)
+		require.Equal(t, "/interaction/error", location.Path)
+		require.Equal(t, "You must verify your email address before you can access this service.", location.Query().Get("error"))
+	})
+
+	t.Run("leaves an authorized request to the authorize handler", func(t *testing.T) {
+		recorder := serve(t, fakeSessionAuthenticator{})
+
+		require.Equal(t, http.StatusNoContent, recorder.Code)
+		require.Empty(t, recorder.Header().Get("Location"))
+	})
 }
 
 func TestAuthorizationHandlerRequiresPAR(t *testing.T) {
@@ -90,7 +144,7 @@ func testAuthorizationHandlerPAR(t *testing.T, clientType string, tt authorizati
 		BaseURL: baseURL, TokenBaseURL: baseURL, Secret: []byte("test-secret"),
 	}, nil)
 	require.NoError(t, err)
-	service := newAuthorizationService(db, newInteractionSessionService(db), newClaimsService(db, nil, baseURL, nil), nil, nil, nil)
+	service := newAuthorizationService(db, newInteractionSessionService(db), newClaimsService(db, nil, baseURL, nil, appconfig.StaticResolver{}), nil, nil, nil)
 	handler := newAuthorizationHandler(provider, service)
 	params := url.Values{
 		"client_id":             {clientID},
@@ -167,8 +221,12 @@ func testAuthorizationHandlerPAR(t *testing.T, clientType string, tt authorizati
 	rec := httptest.NewRecorder()
 	router := gin.New()
 	router.Handle(tt.method, "/authorize", func(c *gin.Context) {
-		c.Set("userID", userID)
-		c.Set("authenticationTime", time.Now().UTC().Add(-time.Minute))
+		authz.SetPrincipal(c, &authz.Principal{
+			Kind:               authz.KindSession,
+			UserID:             userID,
+			Scopes:             authz.UserScopes(false, authz.KindSession),
+			AuthenticationTime: time.Now().UTC().Add(-time.Minute),
+		})
 		handler.authorize(c)
 	})
 	router.ServeHTTP(rec, req)

@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/pocket-id/pocket-id/backend/internal/appconfig"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
 	testutils "github.com/pocket-id/pocket-id/backend/internal/utils/testing"
 )
@@ -16,7 +17,7 @@ func TestClaimsServiceGetUserClaimsForClientNoRemappings(t *testing.T) {
 	const userID = "user-noop"
 
 	customClaims := fakeCustomClaimSource{}
-	service := newClaimsService(db, customClaims, "https://id.example.com", nil)
+	service := newClaimsService(db, customClaims, "https://id.example.com", nil, appconfig.StaticResolver{})
 
 	require.NoError(t, db.Create(&model.User{
 		Base:     model.Base{ID: userID},
@@ -47,7 +48,7 @@ func TestClaimsServiceGetUserClaimsForClientRemapsFromSources(t *testing.T) {
 		{Key: "work_email", Value: "tim@work.example"},
 		{Key: "flags", Value: `["a","b"]`},
 	}}
-	service := newClaimsService(db, customClaims, "https://id.example.com", nil)
+	service := newClaimsService(db, customClaims, "https://id.example.com", nil, appconfig.StaticResolver{})
 
 	require.NoError(t, db.Create(&model.User{
 		Base:        model.Base{ID: userID},
@@ -98,7 +99,7 @@ func TestClaimsServiceRemappingFallsBackWhenSourceMissing(t *testing.T) {
 	const userID = "user-fallback"
 
 	customClaims := fakeCustomClaimSource{}
-	service := newClaimsService(db, customClaims, "https://id.example.com", nil)
+	service := newClaimsService(db, customClaims, "https://id.example.com", nil, appconfig.StaticResolver{})
 
 	require.NoError(t, db.Create(&model.User{
 		Base:     model.Base{ID: userID},
@@ -131,7 +132,7 @@ func TestClaimsServiceRemappingCustomClaimWithoutProfileScope(t *testing.T) {
 	customClaims := fakeCustomClaimSource{claims: []model.CustomClaim{
 		{Key: "department", Value: "sales"},
 	}}
-	service := newClaimsService(db, customClaims, "https://id.example.com", nil)
+	service := newClaimsService(db, customClaims, "https://id.example.com", nil, appconfig.StaticResolver{})
 
 	require.NoError(t, db.Create(&model.User{
 		Base:     model.Base{ID: userID},
@@ -157,7 +158,7 @@ func TestClaimsServiceRemappingUserFieldNilSource(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 	const userID = "user-nil"
 
-	service := newClaimsService(db, fakeCustomClaimSource{}, "https://id.example.com", nil)
+	service := newClaimsService(db, fakeCustomClaimSource{}, "https://id.example.com", nil, appconfig.StaticResolver{})
 
 	// User has no email and no locale
 	require.NoError(t, db.Create(&model.User{
@@ -186,7 +187,7 @@ func TestClaimsServiceRemappingStaticJSONVariants(t *testing.T) {
 	db := testutils.NewDatabaseForTest(t)
 	const userID = "user-static"
 
-	service := newClaimsService(db, fakeCustomClaimSource{}, "https://id.example.com", nil)
+	service := newClaimsService(db, fakeCustomClaimSource{}, "https://id.example.com", nil, appconfig.StaticResolver{})
 	require.NoError(t, db.Create(&model.User{Base: model.Base{ID: userID}, Username: "u"}).Error)
 
 	client := &model.OidcClient{

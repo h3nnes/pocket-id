@@ -125,6 +125,9 @@ func TestMigrateDatabaseRepairsSkippedMigrations(t *testing.T) {
 	require.NoError(t, err)
 
 	// Rewind the recorded version so the pending migrations run again
+	// Upstream's email-deadline migration sits above the backfill and is not idempotent, so drop its column first to replay it from the pre-column state
+	_, err = sqlDb.ExecContext(t.Context(), "ALTER TABLE users DROP COLUMN email_verification_deadline")
+	require.NoError(t, err)
 	_, err = sqlDb.ExecContext(t.Context(), "UPDATE schema_migrations SET version = 20260929120000, dirty = 0")
 	require.NoError(t, err)
 

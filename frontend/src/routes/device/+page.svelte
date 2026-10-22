@@ -14,7 +14,7 @@
 	import type { DeviceLoginVerificationInfo } from '#lib/types/device-login.type.ts';
 	import type { OidcDeviceCodeInfo } from '#lib/types/oidc.type.ts';
 	import { getClientIDHost } from '#lib/utils/client-id-util.ts';
-	import { getWebauthnErrorMessage } from '#lib/utils/error-util.ts';
+	import { getAxiosErrorCode, getWebauthnErrorMessage } from '#lib/utils/error-util.ts';
 	import { preventDefault } from '#lib/utils/event-util.ts';
 	import { startAuthentication } from '@simplewebauthn/browser';
 	import { onMount } from 'svelte';
@@ -37,6 +37,7 @@
 	let deviceLoginDecision: 'approve' | 'deny' | undefined = $state();
 	let errorMessage: string | null = $state(null);
 	let authorizationRequired = $state(false);
+	let selectedScopes: string[] = $state([]);
 	let reauthenticationRequired = $state(false);
 	let reauthenticated = $state(false);
 	let normalizedUserCode = $derived(
@@ -44,6 +45,8 @@
 	);
 	let codeComplete = $derived(normalizedUserCode.length === 8);
 	let completed = $derived(success || deviceLoginOutcome !== undefined);
+	let errorCode: string | undefined = $state();
+	let emailVerificationRequired = $derived(errorCode === 'email_verification_required');
 	let deviceLoginLocation = $derived(
 		deviceLoginInfo?.city && deviceLoginInfo.country
 			? `${deviceLoginInfo.city}, ${deviceLoginInfo.country}`
@@ -62,6 +65,7 @@
 
 		isLoading = true;
 		errorMessage = null;
+		errorCode = undefined;
 		try {
 			await authenticateUserIfNeeded();
 
@@ -76,6 +80,8 @@
 
 			if (info.authorizationRequired && !authorizationRequired) {
 				authorizationRequired = true;
+				// Every requested scope starts selected so the user only has to deselect the ones they do not want to grant
+				selectedScopes = [...(info.scope ?? [])];
 				return;
 			}
 
@@ -89,10 +95,14 @@
 				reauthenticated = true;
 			}
 
-			await oidcService.verifyDeviceCode(normalizedUserCode);
+			await oidcService.verifyDeviceCode(
+				normalizedUserCode,
+				authorizationRequired ? selectedScopes : undefined
+			);
 			success = true;
 		} catch (error) {
 			errorMessage = getWebauthnErrorMessage(error);
+			errorCode = getAxiosErrorCode(error);
 		} finally {
 			isLoading = false;
 		}
@@ -111,6 +121,7 @@
 		isLoading = true;
 		deviceLoginDecision = decision;
 		errorMessage = null;
+		errorCode = undefined;
 		try {
 			if (decision === 'approve') {
 				await reauthenticate();
@@ -119,6 +130,7 @@
 			deviceLoginOutcome = decision === 'approve' ? 'approved' : 'denied';
 		} catch (error) {
 			errorMessage = getWebauthnErrorMessage(error);
+			errorCode = getAxiosErrorCode(error);
 		} finally {
 			isLoading = false;
 			deviceLoginDecision = undefined;
@@ -137,6 +149,7 @@
 
 	function retry() {
 		errorMessage = null;
+		errorCode = undefined;
 		if (!deviceLoginInfo) {
 			userCode = '';
 		}
@@ -168,7 +181,7 @@
 	</h1>
 	{#if errorMessage}
 		<p class="text-muted-foreground mt-2">
-			{errorMessage}. {m.please_try_again()}
+			{errorMessage}. {#if !emailVerificationRequired}{m.please_try_again()}{/if}
 		</p>
 	{:else if deviceLoginOutcome === 'approved'}
 		<p class="text-muted-foreground mt-2">{m.the_requesting_device_has_been_signed_in()}</p>
@@ -229,7 +242,11 @@
 					</Card.Description>
 				</Card.Header>
 				<Card.Content data-testid="scopes">
-					<ScopeList scopes={deviceInfo!.scope || []} scopeInfo={deviceInfo!.scopeInfo || []} />
+					<ScopeList
+						scopes={deviceInfo!.scope || []}
+						scopeInfo={deviceInfo!.scopeInfo || []}
+						bind:selectedScopes
+					/>
 				</Card.Content>
 			</Card.Root>
 		</div>
@@ -268,7 +285,11 @@
 		<div class="mt-10 flex w-full max-w-112.5 gap-2">
 			{#if errorMessage}
 				<Button class="flex-1" variant="secondary" href="/">{m.cancel()}</Button>
-				<Button class="flex-1" onclick={retry}>{m.try_again()}</Button>
+				{#if emailVerificationRequired}
+					<Button class="flex-1" href="/settings/account">{m.verify_email_address()}</Button>
+				{:else}
+					<Button class="flex-1" onclick={retry}>{m.try_again()}</Button>
+				{/if}
 			{:else if deviceLoginInfo}
 				<Button
 					class="flex-1"

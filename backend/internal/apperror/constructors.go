@@ -79,7 +79,7 @@ func UnsupportedFileType(expected string) *Error {
 }
 
 func FileTooLarge(maxSize string) *Error {
-	return New(CodeFileTooLarge, http.StatusRequestEntityTooLarge, fmt.Sprintf("File must not exceed %s", maxSize)).WithDetail("max_size", maxSize)
+	return New(CodeFileTooLarge, http.StatusRequestEntityTooLarge, "File must not exceed "+maxSize).WithDetail("max_size", maxSize)
 }
 
 func NotSignedIn() *Error {
@@ -88,6 +88,15 @@ func NotSignedIn() *Error {
 
 func MissingPermission() *Error {
 	return New(CodeForbidden, http.StatusForbidden, "You don't have permission to perform this action")
+}
+
+// MissingScope keeps the generic forbidden code and names the scope the caller lacks so API clients can tell what to request
+func MissingScope(scope string) *Error {
+	return MissingPermission().WithDetail("required_scope", scope)
+}
+
+func CrossOriginRequestForbidden(cause error) *Error {
+	return Wrap(cause, CodeForbidden, http.StatusForbidden, "Cross-origin requests are not allowed")
 }
 
 func TooManyRequests() *Error {
@@ -272,7 +281,7 @@ func LogoTypeNotSupported() *Error {
 }
 
 func LogoTooLarge(maxSize string) *Error {
-	return New(CodeLogoTooLarge, http.StatusUnprocessableEntity, fmt.Sprintf("Downloaded logo must not exceed %s", maxSize)).
+	return New(CodeLogoTooLarge, http.StatusUnprocessableEntity, "Downloaded logo must not exceed "+maxSize).
 		WithDetail("max_size", maxSize)
 }
 
@@ -298,4 +307,12 @@ func OidcPARRequired() *Error {
 
 func InvalidEmailVerificationToken() *Error {
 	return New(CodeEmailVerificationTokenInvalid, http.StatusBadRequest, "Email verification token is invalid")
+}
+
+func EmailVerificationRequired() *Error {
+	return New(CodeEmailVerificationRequired, http.StatusForbidden, "You must verify your email address before you can access this service.")
+}
+
+func EmailChangeNotStarted(cause error) *Error {
+	return Wrap(cause, CodeEmailChangeNotStarted, http.StatusInternalServerError, "Your other changes were saved, but the email to confirm your new email address could not be sent")
 }

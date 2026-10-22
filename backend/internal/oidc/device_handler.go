@@ -4,13 +4,20 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/ory/fosite"
+	"github.com/pocket-id/fosite"
 	"github.com/pocket-id/pocket-id/backend/internal/apperror"
+	"github.com/pocket-id/pocket-id/backend/internal/authz"
+	"github.com/pocket-id/pocket-id/backend/internal/httpserver"
 	"github.com/pocket-id/pocket-id/backend/internal/utils/cookie"
 )
+
+type verifyDeviceCodeRequest struct {
+	// Scopes are the scopes the user approved on the consent screen
+	// Omitting them approves every requested scope
+	Scopes []string `json:"scopes"`
+}
 
 type deviceHandler struct {
 	provider      fosite.OAuth2Provider
@@ -39,8 +46,7 @@ func (h *deviceHandler) authorizeDevice(c *gin.Context) {
 }
 
 func (h *deviceHandler) verifyDeviceCode(c *gin.Context) {
-	authenticationTime, _ := c.Get("authenticationTime")
-	typedAuthenticationTime, _ := authenticationTime.(time.Time)
+	principal := authz.PrincipalFrom(c)
 	reauthenticationToken, _ := c.Cookie(cookie.ReauthenticationTokenCookieName)
 
 	userCode := c.Query("code")
@@ -49,12 +55,20 @@ func (h *deviceHandler) verifyDeviceCode(c *gin.Context) {
 		return
 	}
 
+	// The body is optional so callers that send no scope selection approve every requested scope
+	var request verifyDeviceCodeRequest
+	if err := httpserver.BindOptionalJSON(c, &request); err != nil {
+		_ = c.Error(err)
+		return
+	}
+
 	err := h.deviceService.acceptDeviceCode(
 		c.Request.Context(),
 		userCode,
-		c.GetString("userID"),
-		c.GetString("authenticationMethod"),
-		typedAuthenticationTime,
+		principal.UserID,
+		principal.AuthenticationMethod,
+		principal.AuthenticationTime,
+		request.Scopes,
 		reauthenticationToken,
 		requestMetaFromGin(c),
 	)
@@ -77,7 +91,7 @@ func (h *deviceHandler) deviceCodeInfo(c *gin.Context) {
 		return
 	}
 
-	deviceCodeInfo, err := h.deviceService.getDeviceCodeInfo(c.Request.Context(), userCode, c.GetString("userID"))
+	deviceCodeInfo, err := h.deviceService.getDeviceCodeInfo(c.Request.Context(), userCode, authz.PrincipalFrom(c).UserID)
 	if err != nil {
 		_ = c.Error(err)
 		return

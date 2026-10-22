@@ -4,10 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"slices"
+	"strings"
 
-	"github.com/ory/fosite"
+	"github.com/pocket-id/fosite"
+	"github.com/pocket-id/pocket-id/backend/internal/appconfig"
 	"github.com/pocket-id/pocket-id/backend/internal/common"
+	"github.com/pocket-id/pocket-id/backend/internal/emailverification"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
 	"gorm.io/gorm"
 )
@@ -16,20 +20,38 @@ const (
 	idTokenType = "id-token"
 )
 
+const emailVerificationRequiredHint = "You must verify your email address before you can access this service."
+
 type ClaimsService struct {
 	db           *gorm.DB
 	customClaims CustomClaimSource
 	baseURL      string
 	signer       TokenSigner
+	appConfig    appconfig.AppConfigResolver
 }
 
-func newClaimsService(db *gorm.DB, customClaims CustomClaimSource, baseURL string, signer TokenSigner) *ClaimsService {
+func newClaimsService(db *gorm.DB, customClaims CustomClaimSource, baseURL string, signer TokenSigner, appConfig appconfig.AppConfigResolver) *ClaimsService {
 	return &ClaimsService{
 		db:           db,
 		customClaims: customClaims,
 		baseURL:      baseURL,
 		signer:       signer,
+		appConfig:    appConfig,
 	}
+}
+
+// isEmailVerificationPending reports whether the user still has to verify their email before tokens can be issued for them
+func (s *ClaimsService) isEmailVerificationPending(ctx context.Context, user *model.User) (bool, error) {
+	if !emailverification.CanBePending(user) {
+		return false, nil
+	}
+
+	cfg, err := s.appConfig.GetConfig(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return emailverification.IsPending(cfg, user), nil
 }
 
 // ValidateUserAccess re-checks, at token-issuance time, that the user behind a grant is
@@ -55,6 +77,15 @@ func (s *ClaimsService) ValidateUserAccess(ctx context.Context, userID string, c
 
 	if user.Disabled {
 		return fosite.ErrInvalidGrant.WithHint("The user account is disabled.")
+	}
+
+	// The authorization middleware already stops these users at the authorize step, but grants issued before the email became unverified, such as refresh tokens, are only checked here
+	pending, err := s.isEmailVerificationPending(ctx, &user)
+	if err != nil {
+		return err
+	}
+	if pending {
+		return fosite.ErrInvalidGrant.WithHint(emailVerificationRequiredHint)
 	}
 
 	if !IsUserGroupAllowedToAuthorize(user, client.OidcClient) {
@@ -128,13 +159,7 @@ func (s *ClaimsService) GetUserClaims(ctx context.Context, userID string, scopes
 		}
 
 		for _, customClaim := range customClaims {
-			// A custom claim value can be a JSON document or a plain string
-			var jsonValue any
-			if err := json.Unmarshal([]byte(customClaim.Value), &jsonValue); err == nil {
-				claims[customClaim.Key] = jsonValue
-			} else {
-				claims[customClaim.Key] = customClaim.Value
-			}
+			claims[customClaim.Key] = parseCustomClaimValue(customClaim.Value)
 		}
 
 		claims["given_name"] = user.FirstName
@@ -216,12 +241,7 @@ func (s *ClaimsService) GetUserClaimsForClient(ctx context.Context, userID strin
 		}
 		customClaimsMap = make(map[string]any, len(customClaims))
 		for _, cc := range customClaims {
-			var jsonValue any
-			if err := json.Unmarshal([]byte(cc.Value), &jsonValue); err == nil {
-				customClaimsMap[cc.Key] = jsonValue
-			} else {
-				customClaimsMap[cc.Key] = cc.Value
-			}
+			customClaimsMap[cc.Key] = parseCustomClaimValue(cc.Value)
 		}
 	}
 
@@ -292,13 +312,8 @@ func applyClaimRemappings(
 			}
 
 		case model.RemappingSourceStatic:
-			// Static values are first tried as JSON so arrays and booleans work; a parse failure falls back to the literal string
-			var jsonValue any
-			if err := json.Unmarshal([]byte(remapping.SourceValue), &jsonValue); err == nil {
-				remappedValue = jsonValue
-			} else {
-				remappedValue = remapping.SourceValue
-			}
+			// Static values are first tried as JSON so arrays, objects and numbers work; a parse failure falls back to the literal string
+			remappedValue = parseCustomClaimValue(remapping.SourceValue)
 			foundValue = true
 		}
 
@@ -307,4 +322,50 @@ func applyClaimRemappings(
 			claims[remapping.ClaimName] = remappedValue
 		}
 	}
+}
+
+// parseCustomClaimValue decodes a custom claim value that is a JSON document and returns any other value as a plain string
+// Integers are kept as int64 because float64 drops digits past 2^53 and is written in exponent form in signed tokens
+func parseCustomClaimValue(value string) any {
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.UseNumber()
+
+	var parsed any
+	if err := decoder.Decode(&parsed); err != nil || decoder.Decode(new(any)) != io.EOF {
+		return value
+	}
+
+	normalized, err := normalizeJSONNumbers(parsed)
+	if err != nil {
+		return value
+	}
+	return normalized
+}
+
+// normalizeJSONNumbers replaces every json.Number with an int64 when it is an integer and with a float64 otherwise
+func normalizeJSONNumbers(value any) (any, error) {
+	switch v := value.(type) {
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return i, nil
+		}
+		return v.Float64()
+	case map[string]any:
+		for key, item := range v {
+			normalized, err := normalizeJSONNumbers(item)
+			if err != nil {
+				return nil, err
+			}
+			v[key] = normalized
+		}
+	case []any:
+		for i, item := range v {
+			normalized, err := normalizeJSONNumbers(item)
+			if err != nil {
+				return nil, err
+			}
+			v[i] = normalized
+		}
+	}
+	return value, nil
 }

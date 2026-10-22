@@ -8,23 +8,23 @@ import (
 	"github.com/go-webauthn/webauthn/webauthn"
 
 	datatype "github.com/pocket-id/pocket-id/backend/internal/model/types"
-	"github.com/pocket-id/pocket-id/backend/internal/utils"
 )
 
 type User struct {
 	Base
 
-	Username      string  `sortable:"case-insensitive"`
-	Email         *string `sortable:"case-insensitive"`
-	EmailVerified bool    `sortable:"true" filterable:"true"`
-	FirstName     string  `sortable:"case-insensitive"`
-	LastName      string  `sortable:"case-insensitive"`
-	DisplayName   string  `sortable:"case-insensitive"`
-	IsAdmin       bool    `sortable:"true" filterable:"true"`
-	Locale        *string
-	LdapID        *string
-	Disabled      bool `sortable:"true" filterable:"true"`
-	UpdatedAt     *datatype.DateTime
+	Username                  string  `sortable:"case-insensitive"`
+	Email                     *string `sortable:"case-insensitive"`
+	EmailVerified             bool    `sortable:"true" filterable:"true"`
+	EmailVerificationDeadline *datatype.DateTime
+	FirstName                 string `sortable:"case-insensitive"`
+	LastName                  string `sortable:"case-insensitive"`
+	DisplayName               string `sortable:"case-insensitive"`
+	IsAdmin                   bool   `sortable:"true" filterable:"true"`
+	Locale                    *string
+	LdapID                    *string
+	Disabled                  bool `sortable:"true" filterable:"true"`
+	UpdatedAt                 *datatype.DateTime
 
 	CustomClaims []CustomClaim
 	UserGroups   []UserGroup `gorm:"many2many:user_groups_users;"`
@@ -86,16 +86,6 @@ func (u User) FullName() string {
 	}
 
 	return u.Username
-}
-
-func (u User) Initials() string {
-	first := utils.GetFirstCharacter(u.FirstName)
-	last := utils.GetFirstCharacter(u.LastName)
-	if first != "" || last != "" {
-		return strings.ToUpper(first + last)
-	}
-
-	return strings.ToUpper(utils.GetFirstCharacter(u.Username))
 }
 
 func (u User) LastModified() time.Time {

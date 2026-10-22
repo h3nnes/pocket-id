@@ -32,7 +32,7 @@ const (
 )
 
 // RateLimitPolicy is the configuration for a single rate-limit actor
-// Each policy maps to one Francis rate-limit actor type and requests are keyed by client IP, so every IP is limited independently and per-route limits stay isolated from each other
+// Each policy maps to one Francis rate-limit actor type and requests are keyed by client IP, so every IP is limited independently and policies can be shared across routes
 type RateLimitPolicy struct {
 	// Name must be unique across policies and must not contain '/'
 	Name string

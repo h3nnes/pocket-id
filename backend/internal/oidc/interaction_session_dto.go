@@ -14,16 +14,27 @@ const (
 )
 
 type interactionSessionForUser struct {
-	ID            string                    `json:"id"`
-	Scopes        []string                  `json:"scopes"`
-	ScopeInfo     []dto.ScopeInfoDto        `json:"scopeInfo"`
-	Client        dto.OidcClientMetaDataDto `json:"client"`
-	CurrentStep   interactionStep           `json:"currentStep,omitempty"`
-	RequiredSteps []interactionStep         `json:"requiredSteps"`
+	ID            string             `json:"id"`
+	Scopes        []string           `json:"scopes"`
+	ScopeInfo     []dto.ScopeInfoDto `json:"scopeInfo"`
+	Client        interactionClient  `json:"client"`
+	CurrentStep   interactionStep    `json:"currentStep,omitempty"`
+	RequiredSteps []interactionStep  `json:"requiredSteps"`
+}
+
+type interactionClient struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	HasLogo     bool   `json:"hasLogo"`
+	HasDarkLogo bool   `json:"hasDarkLogo"`
+	ClientType  string `json:"clientType"`
 }
 
 type completeInteractionRequest struct {
 	Step interactionStep `json:"step"`
+	// Scopes are the scopes the user approved on the consent screen
+	// Omitting them approves every requested scope
+	Scopes []string `json:"scopes"`
 }
 
 type completeInteractionResponse struct {
@@ -32,7 +43,7 @@ type completeInteractionResponse struct {
 }
 
 func newInteractionSessionForUser(interactionSession InteractionSession) (interactionSessionForUser, error) {
-	var client dto.OidcClientMetaDataDto
+	var client interactionClient
 	if err := dto.MapStruct(interactionSession.Client, &client); err != nil {
 		return interactionSessionForUser{}, err
 	}

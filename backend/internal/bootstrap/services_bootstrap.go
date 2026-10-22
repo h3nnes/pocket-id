@@ -24,6 +24,7 @@ import (
 	"github.com/pocket-id/pocket-id/backend/internal/logopreset"
 	"github.com/pocket-id/pocket-id/backend/internal/oidc"
 	"github.com/pocket-id/pocket-id/backend/internal/onetimeaccess"
+	"github.com/pocket-id/pocket-id/backend/internal/outbound"
 	"github.com/pocket-id/pocket-id/backend/internal/scimsync"
 	"github.com/pocket-id/pocket-id/backend/internal/service"
 	"github.com/pocket-id/pocket-id/backend/internal/storage"
@@ -67,6 +68,7 @@ func initServices(
 	instanceID string,
 	actors francishost.Host,
 	httpClient *http.Client,
+	outboundClients *outbound.Clients,
 	imageExtensions map[string]string,
 	fileStorage storage.FileStorage,
 ) (svc *services, err error) {
@@ -146,7 +148,7 @@ func initServices(
 	svc.scimSyncModule, err = scimsync.New(scimsync.Dependencies{
 		DB:         db,
 		Actors:     actors,
-		HTTPClient: httpClient,
+		HTTPClient: outboundClients.Client(outbound.PurposeSCIM),
 		// Disable in test environment
 		ScheduleDisabled: common.EnvConfig.AppEnv.IsTest(),
 	})
@@ -159,7 +161,8 @@ func initServices(
 	svc.oidcModule, err = oidc.New(ctx, oidc.Dependencies{
 		DB:                  db,
 		Actors:              actors,
-		HTTPClient:          httpClient,
+		FederatedJWKSClient: outboundClients.Client(outbound.PurposeFederatedJWKS),
+		CIMDTransport:       outboundClients.Transport(outbound.PurposeClientMetadata),
 		GetCIMDURLAllowlist: svc.appConfigService.GetCIMDURLAllowlist,
 		Config: oidc.Config{
 			BaseURL:                   common.EnvConfig.AppURL,
@@ -172,6 +175,7 @@ func initServices(
 		Reauth:       svc.webauthnModule,
 		AuditLog:     svc.auditLogsModule,
 		APIAccess:    svc.apiModule,
+		AppConfig:    svc.appConfigService,
 		// Disable in test environment
 		CleanupDisabled: common.EnvConfig.AppEnv.IsTest(),
 	})
@@ -179,23 +183,36 @@ func initServices(
 		return nil, fmt.Errorf("failed to create OIDC module: %w", err)
 	}
 
-	backchannelLogoutService, err := backchannellogout.NewService(db, svc.jwtService, httpClient, actors)
+	backchannelLogoutService, err := backchannellogout.NewService(db, svc.jwtService, outboundClients.Client(outbound.PurposeBackchannelLogout), actors)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create back-channel logout service: %w", err)
 	}
 
-	svc.oidcService, err = service.NewOidcService(db, svc.jwtService, svc.oidcModule.Preview, svc.oidcModule, svc.scimSyncModule, backchannelLogoutService, httpClient, fileStorage)
+	svc.oidcService, err = service.NewOidcService(db, svc.jwtService, svc.oidcModule.Preview, svc.oidcModule, svc.scimSyncModule, backchannelLogoutService, outboundClients.Client(outbound.PurposeClientLogo), fileStorage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OIDC service: %w", err)
 	}
 
 	svc.userGroupService = service.NewUserGroupService(db, svc.scimSyncModule, backchannelLogoutService)
-	svc.userService = service.NewUserService(db, svc.jwtService, svc.customClaimService, svc.appImagesService, svc.scimSyncModule, backchannelLogoutService, fileStorage)
+	// The user service sends verification links through this module, so it's created first and never depends on the user service itself
+	svc.emailVerificationModule, err = emailverification.New(emailverification.Dependencies{
+		DB:          db,
+		Actors:      actors,
+		EmailSender: svc.emailModule,
+		ScimSync:    svc.scimSyncModule,
+		AppConfig:   svc.appConfigService,
+		AppURL:      common.EnvConfig.AppURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create email verification module: %w", err)
+	}
+
+	svc.userService = service.NewUserService(db, svc.jwtService, svc.customClaimService, svc.appImagesService, svc.scimSyncModule, backchannelLogoutService, fileStorage, svc.emailVerificationModule)
 
 	svc.ldapSyncModule, err = ldapsync.New(ldapsync.Dependencies{
 		DB:                db,
 		Actors:            actors,
-		HTTPClient:        httpClient,
+		HTTPClient:        outboundClients.Client(outbound.PurposeLDAPPicture),
 		FileStorage:       fileStorage,
 		Users:             svc.userService,
 		Groups:            svc.userGroupService,
@@ -222,13 +239,17 @@ func initServices(
 	}
 
 	svc.userSignUpModule, err = usersignup.New(usersignup.Dependencies{
-		DB:          db,
-		Actors:      actors,
-		Signer:      svc.jwtService,
-		AuditLog:    svc.auditLogsModule,
-		UserCreator: svc.userService,
-		AppConfig:   svc.appConfigService,
-		ScimSync:    svc.scimSyncModule,
+		DB:                db,
+		Actors:            actors,
+		Signer:            svc.jwtService,
+		AuditLog:          svc.auditLogsModule,
+		UserCreator:       svc.userService,
+		AppConfig:         svc.appConfigService,
+		ScimSync:          svc.scimSyncModule,
+		UserDeleter:       svc.userService,
+		EmailVerification: svc.emailVerificationModule,
+		// Disable in test environment
+		CleanupDisabled: common.EnvConfig.AppEnv.IsTest(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user signup module: %w", err)
@@ -245,18 +266,6 @@ func initServices(
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create one-time access module: %w", err)
-	}
-
-	svc.emailVerificationModule, err = emailverification.New(emailverification.Dependencies{
-		DB:          db,
-		Actors:      actors,
-		Users:       svc.userService,
-		EmailSender: svc.emailModule,
-		AppConfig:   svc.appConfigService,
-		AppURL:      common.EnvConfig.AppURL,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create email verification module: %w", err)
 	}
 
 	svc.environmentModule = environment.New(environment.Dependencies{

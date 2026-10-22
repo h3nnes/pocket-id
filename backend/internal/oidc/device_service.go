@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
-	"github.com/ory/fosite"
-	"github.com/ory/fosite/handler/rfc8628"
+	"github.com/pocket-id/fosite"
+	"github.com/pocket-id/fosite/handler/rfc8628"
 	"gorm.io/gorm"
 
 	"github.com/pocket-id/pocket-id/backend/internal/apperror"
@@ -85,7 +86,7 @@ func (s *deviceService) createDeviceAuthorization(ctx context.Context, req *http
 	}, request, nil
 }
 
-func (s *deviceService) acceptDeviceCode(ctx context.Context, userCode, userID, authenticationMethod string, authenticationTime time.Time, reauthenticationToken string, meta requestMeta) error {
+func (s *deviceService) acceptDeviceCode(ctx context.Context, userCode, userID, authenticationMethod string, authenticationTime time.Time, approvedScopes []string, reauthenticationToken string, meta requestMeta) error {
 	request, userCodeSignature, err := s.deviceRequestFromUserCode(ctx, userCode)
 	if err != nil {
 		return err
@@ -105,6 +106,11 @@ func (s *deviceService) acceptDeviceCode(ctx context.Context, userCode, userID, 
 	}
 	if !IsUserGroupAllowedToAuthorize(user, client.OidcClient) {
 		return fosite.ErrAccessDenied.WithHint("You are not allowed to access this service.")
+	}
+
+	// Narrow the request to the scopes the user approved before resolving the grant, so deselected scopes are neither consented to nor granted
+	if err := narrowDeviceRequestScopes(request, approvedScopes); err != nil {
+		return err
 	}
 
 	resource, err := request.GetResource()
@@ -135,6 +141,9 @@ func (s *deviceService) acceptDeviceCode(ctx context.Context, userCode, userID, 
 
 		session := NewAuthenticatedSession(userID, authenticationMethod, authenticationTime, request.GetRequestedAt())
 
+		// Keep the lifetimes of the pending device authorization, so its codes and the OpenID Connect session created below still expire
+		copyDeviceCodeExpiry(request.GetSession(), session)
+
 		if err = s.claimsService.applyIDTokenClaims(ctx, session, request.GetGrantedScopes(), &client.OidcClient); err != nil {
 			return err
 		}
@@ -164,6 +173,43 @@ func (s *deviceService) acceptDeviceCode(ctx context.Context, userCode, userID, 
 
 		return nil
 	})
+}
+
+// narrowDeviceRequestScopes restricts a pending device authorization to the scopes the user approved on the consent screen
+// The device authorization endpoint already granted every allowed scope, so the grants of deselected scopes are dropped as well
+func narrowDeviceRequestScopes(request fosite.DeviceRequester, approvedScopes []string) error {
+	if approvedScopes == nil {
+		return nil
+	}
+
+	narrowed, err := narrowApprovedScopes(request.GetRequestedScopes(), approvedScopes)
+	if err != nil {
+		return err
+	}
+
+	// The requester interface can only add grants, so the stored device request is changed directly
+	deviceRequest, ok := request.(*fosite.DeviceRequest)
+	if !ok {
+		return errors.New("unexpected device request type")
+	}
+	deviceRequest.SetRequestedScopes(narrowed)
+	deviceRequest.GrantedScope = slices.DeleteFunc(deviceRequest.GrantedScope, func(scope string) bool {
+		return !slices.Contains(narrowed, scope)
+	})
+
+	return nil
+}
+
+// copyDeviceCodeExpiry copies the device and user code expiry from the pending device authorization's session to the session that replaces it
+func copyDeviceCodeExpiry(from fosite.Session, to *Session) {
+	if from == nil {
+		return
+	}
+	for _, tokenType := range []fosite.TokenType{fosite.DeviceCode, fosite.UserCode} {
+		if expiresAt := from.GetExpiresAt(tokenType); !expiresAt.IsZero() {
+			to.SetExpiresAt(tokenType, expiresAt)
+		}
+	}
 }
 
 func (s *deviceService) loadDeviceAuthorizationUser(ctx context.Context, userID string) (model.User, error) {

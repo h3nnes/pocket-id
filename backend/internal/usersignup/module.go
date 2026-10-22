@@ -11,6 +11,7 @@ import (
 
 	"github.com/pocket-id/pocket-id/backend/internal/appconfig"
 	"github.com/pocket-id/pocket-id/backend/internal/auditlogs"
+	"github.com/pocket-id/pocket-id/backend/internal/authz"
 	"github.com/pocket-id/pocket-id/backend/internal/dto"
 	"github.com/pocket-id/pocket-id/backend/internal/httpserver"
 	"github.com/pocket-id/pocket-id/backend/internal/model"
@@ -28,6 +29,10 @@ type UserCreator interface {
 	CreateUserInternal(ctx context.Context, dbConfig *appconfig.AppConfigModel, input dto.UserCreateDto, isLdapSync bool, tx *gorm.DB) (model.User, error)
 }
 
+type EmailVerificationSender interface {
+	Send(ctx context.Context, dbConfig *appconfig.AppConfigModel, userID string) error
+}
+
 // ScimSyncScheduler schedules SCIM after the signup transaction has committed
 type ScimSyncScheduler interface {
 	ScheduleSync(ctx context.Context)
@@ -42,6 +47,12 @@ type Dependencies struct {
 	UserCreator UserCreator
 	AppConfig   appconfig.AppConfigResolver
 	ScimSync    ScimSyncScheduler
+	UserDeleter UserDeleter
+
+	EmailVerification EmailVerificationSender
+
+	// CleanupDisabled skips registering the cron job that deletes signups that missed their email verification deadline, for example in tests
+	CleanupDisabled bool
 }
 
 type Module struct {
@@ -55,6 +66,19 @@ func New(deps Dependencies) (*Module, error) {
 	err := deps.Actors.RegisterActor(SignupTokenActorType, NewSignupTokenActor)
 	if err != nil {
 		return nil, fmt.Errorf("error registering the %s actor: %w", SignupTokenActorType, err)
+	}
+
+	// Register the job that deletes self-signed-up accounts that did not verify their email in time
+	if !deps.CleanupDisabled {
+		job, err := newCleanupJob(deps.DB, deps.AppConfig, deps.UserDeleter)
+		if err != nil {
+			return nil, err
+		}
+
+		err = deps.Actors.RegisterBuiltInActor(job)
+		if err != nil {
+			return nil, fmt.Errorf("error registering unverified signup cleanup cron actor: %w", err)
+		}
 	}
 
 	service := newService(deps, deps.Actors.Service())
@@ -78,12 +102,12 @@ func (m *Module) RunSignupTokenMigration(ctx context.Context) error {
 }
 
 // RegisterRoutes mounts the signup and signup-token management endpoints
-// adminAuth guards the admin token-management routes; signupRateLimit throttles public self-signup
-func (m *Module) RegisterRoutes(apiGroup *gin.RouterGroup, adminAuth, signupRateLimit gin.HandlerFunc) {
-	apiGroup.POST("/signup-tokens", adminAuth, httpserver.Handle(m.handler.createSignupToken))
-	apiGroup.GET("/signup-tokens", adminAuth, httpserver.Handle(m.handler.listSignupTokens))
-	apiGroup.DELETE("/signup-tokens/:id", adminAuth, httpserver.Handle(m.handler.deleteSignupToken))
-	apiGroup.POST("/signup", signupRateLimit, httpserver.Handle(m.handler.signup))
-	apiGroup.GET("/signup/setup", httpserver.Handle(m.handler.checkInitialAdminSetupAvailable))
-	apiGroup.POST("/signup/setup", httpserver.Handle(m.handler.signUpInitialAdmin))
+// signupRateLimit throttles public self-signup
+func (m *Module) RegisterRoutes(r *authz.Router, signupRateLimit gin.HandlerFunc) {
+	r.POST("/signup-tokens", authz.UsersWrite, httpserver.Handle(m.handler.createSignupToken))
+	r.GET("/signup-tokens", authz.UsersRead, httpserver.Handle(m.handler.listSignupTokens))
+	r.DELETE("/signup-tokens/:id", authz.UsersWrite, httpserver.Handle(m.handler.deleteSignupToken))
+	r.Public().POST("/signup", signupRateLimit, httpserver.Handle(m.handler.signup))
+	r.Public().GET("/signup/setup", httpserver.Handle(m.handler.checkInitialAdminSetupAvailable))
+	r.Public().POST("/signup/setup", httpserver.Handle(m.handler.signUpInitialAdmin))
 }

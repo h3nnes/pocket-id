@@ -9,7 +9,6 @@ import type {
 	OidcClientCreate,
 	OidcClientCreated,
 	OidcClientLogoPreset,
-	OidcClientMetaData,
 	OidcClientSecret,
 	OidcClientSecretCreated,
 	OidcClientUpdate,
@@ -28,10 +27,14 @@ class OidcService extends APIService {
 		return data;
 	};
 
-	completeAuthorizeInteractionStep = async (id: string, step: InteractionStep) => {
+	completeAuthorizeInteractionStep = async (
+		id: string,
+		step: InteractionStep,
+		scopes?: string[]
+	) => {
 		const { data } = await this.api.post<CompleteInteractionResponse>(
 			`/oidc/interactions/${id}/complete`,
-			{ step }
+			{ step, scopes }
 		);
 		return data;
 	};
@@ -53,10 +56,6 @@ class OidcService extends APIService {
 	getClient = async (id: string) =>
 		(await this.api.get(`/oidc/clients/${encodeClientIdParam(id)}`))
 			.data as OidcClientWithAllowedUserGroups;
-
-	getClientMetaData = async (id: string) =>
-		(await this.api.get(`/oidc/clients/${encodeClientIdParam(id)}/meta`))
-			.data as OidcClientMetaData;
 
 	updateClient = async (id: string, client: OidcClientUpdate) =>
 		(await this.api.put(`/oidc/clients/${encodeClientIdParam(id)}`, client)).data as OidcClient;
@@ -121,8 +120,8 @@ class OidcService extends APIService {
 		return res.data as OidcClientWithAllowedUserGroups;
 	};
 
-	verifyDeviceCode = async (userCode: string) => {
-		return await this.api.post(`/oidc/device/verify?code=${userCode}`);
+	verifyDeviceCode = async (userCode: string, scopes?: string[]) => {
+		return await this.api.post(`/oidc/device/verify?code=${userCode}`, { scopes });
 	};
 
 	getDeviceCodeInfo = async (userCode: string): Promise<OidcDeviceCodeInfo> => {
